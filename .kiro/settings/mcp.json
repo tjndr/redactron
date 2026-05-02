@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "linear": {
-      "url": "https://mcp.linear.app/sse"
+      "url": "https://mcp.linear.app/mcp"
     },
     "github": {
       "command": "npx",
@@ -11,8 +11,12 @@
       }
     },
     "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${PWD}"]
+        "command": "npx",
+        "args": [
+            "-y",
+            "@modelcontextprotocol/server-filesystem",
+            "/Users/tejinder/code/redactron"
+        ]
     }
   }
 }

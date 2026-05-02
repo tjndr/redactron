@@ -151,35 +151,6 @@ Your first job is to bootstrap the project end-to-end.
     "✓ Task complete — N credits used — Xm Ys"). Do NOT use /usage or
     kiro-cli usage commands; they don't expose data programmatically.
 
-    On bootstrap, create the SQLite log file .redactron/credits.db with:
-      CREATE TABLE usage (
-        id INTEGER PRIMARY KEY,
-        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        task_id TEXT,
-        milestone TEXT,
-        model TEXT,
-        delta INTEGER,
-        duration_seconds INTEGER,
-        total_after INTEGER,
-        pr_url TEXT,
-        notes TEXT
-      );
-
-    For each completed task:
-    - Capture Kiro's summary line; parse delta (credits) and duration (seconds)
-    - Read latest total_after from .redactron/credits.db (default 0 if empty)
-    - Compute new cumulative: total_after = previous + delta
-    - Comment on the Linear issue:
-        "Task complete. Credits: <delta> | Time: <duration> | Cumulative:
-         <total>/1000 (<percent>%) | Remaining v1: <1000 - total>"
-    - INSERT the new row into .redactron/credits.db
-    - Update the "Credit Budget" Linear project document with new cumulative
-      total and per-milestone actuals (sum of deltas where milestone = current)
-    - Append "Credits: <delta> | Time: <duration>" to the GitHub PR description
-    - If total_after >= 800: post a credit alert comment on the Linear issue
-    - If total_after >= 950: stop auto-execution; require explicit per-task
-      approval from me before continuing
-
 6. Run `uv init` and create pyproject.toml with the locked stack from tech.md
    (Python 3.11, PyMuPDF, presidio-analyzer, presidio-anonymizer, rapidfuzz,
    usaddress, pytesseract, typer, pydantic v2; pytest/ruff/mypy as dev deps;
