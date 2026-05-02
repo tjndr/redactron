@@ -16,7 +16,8 @@ dependencies = [
     "rapidfuzz==3.9.7",
     "usaddress==0.5.10",
     "pytesseract==0.3.13",
-    "typer==0.12.5",
+    "typer==0.15.2",
+    "click==8.1.8",
     "pydantic==2.9.2",
     "pyyaml==6.0.2",
     "rich==13.9.4",
@@ -57,6 +58,9 @@ exclude = ["tests/"]
 [[tool.mypy.overrides]]
 module = ["fitz.*", "presidio_analyzer.*", "presidio_anonymizer.*", "usaddress.*", "pytesseract.*"]
 ignore_missing_imports = true
+
+[tool.ruff.lint.per-file-ignores]
+"src/redactron/cli.py" = ["UP007"]  # Optional[X] needed; Typer 0.12 breaks with X | Y without __future__
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
