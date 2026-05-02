@@ -1,0 +1,12 @@
+name: "On PR merge: close Linear, advance milestone"
+trigger: pr_merged
+actions:
+  - tool: linear.update_issue
+    args:
+      issue_id: "${task.linear_id}"
+      state: "Done"
+  - tool: shell
+    cmd: "git checkout main && git pull"
+  - tool: linear.update_milestone_progress
+    args:
+      milestone_id: "${task.milestone_id}"

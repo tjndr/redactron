@@ -1,0 +1,17 @@
+name: "On tests pass: commit + push + open PR"
+trigger: tests_pass
+actions:
+  - tool: shell
+    cmd: "git add -A && git commit -m \"${task.commit_message}\""
+  - tool: shell
+    cmd: "git push -u origin ${task.branch_name}"
+  - tool: github.create_pull_request
+    args:
+      title: "${task.title}"
+      body: "Closes ${task.linear_id}\n\n${task.summary}"
+      base: main
+      head: "${task.branch_name}"
+  - tool: linear.add_comment
+    args:
+      issue_id: "${task.linear_id}"
+      body: "PR opened: ${pr.url}"

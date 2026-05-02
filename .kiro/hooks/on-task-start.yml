@@ -1,0 +1,9 @@
+name: "On task start: mark Linear issue In Progress"
+trigger: task_start
+actions:
+  - tool: linear.update_issue
+    args:
+      issue_id: "${task.linear_id}"
+      state: "In Progress"
+  - tool: shell
+      cmd: "git checkout -b ${task.branch_name}"
