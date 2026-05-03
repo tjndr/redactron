@@ -29,7 +29,8 @@ _ABBR_TO_FULL: dict[str, str] = {
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _ZIP4_RE = re.compile(r"(\d{5})-\d{4}")
-_ZIP_RE = re.compile(r"\b\d{5}(?:-\d{4})?\b")
+# ZIP must be a standalone 5-digit token, NOT preceded by # or other non-space chars
+_ZIP_RE = re.compile(r"(?<![#\w])\b\d{5}(?:-\d{4})?\b")
 
 # 2-letter US state abbreviations
 _US_STATES = frozenset({
@@ -100,6 +101,9 @@ def _is_address_continuation(text: str) -> bool:
 
     Used for multi-line bridging: after a street line, look forward for lines
     that continue the address. Stop at prose/non-address content.
+
+    Strict: a 5-digit number only counts as a ZIP if it's not preceded by
+    '#', 'No.', 'No ', or similar invoice/reference prefixes.
     """
     stripped = text.strip()
     if not stripped:
@@ -107,15 +111,24 @@ def _is_address_continuation(text: str) -> bool:
 
     tokens_upper = stripped.upper().split()
 
-    # Has a ZIP code → strong signal
+    # Reject lines that start with invoice/reference keywords
+    first_lower = stripped.lower().split()[0].rstrip(".:#")
+    if first_lower in {"invoice", "inv", "order", "ref", "reference", "po", "bill", "receipt"}:
+        return False
+
+    # Has a ZIP code (strict: not preceded by # or reference markers)
     if _ZIP_RE.search(stripped):
-        return True
+        # Extra check: must also have a state OR city-like token to be a real address line
+        has_state = any(t.rstrip(",") in _US_STATES for t in tokens_upper)
+        has_city_pattern = len(tokens_upper) >= 2 and not stripped[0].isdigit()
+        if has_state or has_city_pattern:
+            return True
 
     # Has a US state abbreviation → likely city/state line
     if any(t.rstrip(",") in _US_STATES for t in tokens_upper):
         return True
 
-    # Occupancy line (Suite 400, Apt 2B, etc.)
+    # Occupancy line (Suite 400, Apt 2B, etc.) — but NOT invoice numbers
     first = stripped.lower().split()[0].rstrip(".")
     if first in _OCCUPANCY_WORDS:
         return True
@@ -146,6 +159,7 @@ def _is_prose_line(text: str) -> bool:
 def _build_address_groups(
     layers: list[TextLayer],
     bridge_window: int,
+    column_aware: bool = True,
 ) -> list[list[TextLayer]]:
     """Group layers into address candidate groups using multi-line bridging.
 
@@ -153,8 +167,8 @@ def _build_address_groups(
     bridge_window subsequent layers for continuation lines (city/state/zip,
     occupancy). Stop bridging if a prose line is encountered.
 
-    Returns a list of groups; each group is a list of TextLayer objects
-    that together form one address candidate.
+    When column_aware=True, continuation lines must have x_center within
+    50% of the seed line's width to prevent cross-column bridging.
     """
     groups: list[list[TextLayer]] = []
     used: set[int] = set()
@@ -165,21 +179,31 @@ def _build_address_groups(
         if not _is_address_candidate(layer.text):
             continue
 
-        # Start a new group with this street line
+        # Seed line x-range for column guard
+        seed_x0, _, seed_x1, _ = layer.bbox
+        seed_x_center = (seed_x0 + seed_x1) / 2
+        seed_width = max(seed_x1 - seed_x0, 50.0)  # minimum 50pt to avoid degenerate cases
+
         group: list[TextLayer] = [layer]
         used.add(i)
 
-        # Look forward for continuation lines
         lookahead = 0
         j = i + 1
         while j < len(layers) and lookahead < bridge_window:
             next_layer = layers[j]
             j += 1
 
-            # Empty line: transparent, don't count against window
+            # Empty line: transparent
             if not next_layer.text.strip():
                 group.append(next_layer)
                 continue
+
+            # Column guard: reject if x_center is too far from seed line
+            if column_aware:
+                nx0, _, nx1, _ = next_layer.bbox
+                nx_center = (nx0 + nx1) / 2
+                if abs(nx_center - seed_x_center) > seed_width:
+                    break  # different column — stop bridging
 
             # Prose line: stop bridging
             if _is_prose_line(next_layer.text):
@@ -191,7 +215,6 @@ def _build_address_groups(
                 used.add(j - 1)
                 lookahead += 1
             else:
-                # Not continuation, not prose — stop
                 break
 
         groups.append(group)
@@ -219,9 +242,10 @@ def detect_addresses(
     threshold = profile.detection.match_threshold * 100
     normalized_addresses = [_normalize_address(a) for a in profile.subject.addresses]
     bridge_window = getattr(profile.detection, "address_line_bridge_window", 3)
+    column_aware = getattr(profile.detection, "column_aware", True)
 
     # Build address candidate groups (handles multi-line)
-    groups = _build_address_groups(layers, bridge_window)
+    groups = _build_address_groups(layers, bridge_window, column_aware)
 
     detections: list[Detection] = []
     for group in groups:

@@ -109,7 +109,24 @@ detection:
 
 **Known limitation — house number disambiguation:** At the default threshold (0.85), "200 Phillip Street" will match a profile address of "100 Phillip Street" because they differ by only one character (~97% similar). To distinguish house numbers, raise `match_threshold` to 0.99 — but this may miss abbreviated or slightly misspelled forms. This is a v1 limitation; v2 will use structured address comparison.
 
-### Multi-line address handling
+### Layout handling
+
+**Multi-column PDFs:** When `detection.column_aware: true` (default), address bridging is restricted to lines within the same horizontal column. A continuation line must have its x-center within the seed line's width of the seed line's x-center. This prevents "100 patients enrolled" (left column) from bridging with "CA 94305 research" (right column).
+
+**Figure text:** When `detection.scan_figures: false` (default), text inside figure/drawing regions is not redacted. Set `scan_figures: true` to include figure text (e.g., if your PDFs contain PII in chart labels or captions).
+
+**Image-only PDFs:** If a PDF has no extractable text layer (scanned document), redactron raises `NoTextLayerError` with a friendly message. OCR support is coming in M4. Until then, pre-process with `ocrmypdf input.pdf output.pdf`.
+
+### Configuration reference
+
+```yaml
+detection:
+  column_aware: true              # restrict address bridging to same column
+  scan_figures: false             # skip text inside figure/drawing regions
+  address_line_bridge_window: 3   # max lines to look ahead for address continuation
+```
+
+
 
 Many PDFs render addresses across multiple lines (street on one line, city/state/zip on the next). redactron handles this with **multi-line bridging**:
 

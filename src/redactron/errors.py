@@ -23,3 +23,7 @@ class RedactionError(RedactronError):
 
 class VerificationError(RedactronError):
     """Raised when PII survivors are detected after redaction."""
+
+
+class NoTextLayerError(RedactronError):
+    """Raised when a PDF has no extractable text layer (likely a scan)."""

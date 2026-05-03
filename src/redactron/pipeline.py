@@ -17,7 +17,7 @@ from pathlib import Path
 import fitz
 
 from redactron.detect.presidio_detector import Detection
-from redactron.errors import RedactionError
+from redactron.errors import NoTextLayerError, RedactionError
 from redactron.profile import Profile
 
 log = logging.getLogger(__name__)
@@ -117,6 +117,21 @@ def run_pipeline(
     )
 
     doc = open_pdf(input_path)
+
+    # Pre-flight: detect image-only (scanned) PDFs
+    total_chars = sum(len(page.get_text()) for page in doc)
+    has_images = any(page.get_images() for page in doc)
+    if total_chars < 50 and has_images:
+        doc.close()
+        raise NoTextLayerError(
+            "❌ This PDF appears to be a scan or image-only document with no text layer.\n"
+            "Redactron cannot detect text without OCR.\n"
+            "OCR support is coming in v1 milestone M4. Until then:\n"
+            "  1. Re-export from source application with 'searchable text', OR\n"
+            "  2. Run an OCR tool first (e.g., `ocrmypdf input.pdf output.pdf`)\n"
+            "     and pass the OCR'd file to redactron.\n"
+            "Run with --debug to see per-page character counts."
+        )
     # Work on an in-memory copy; mutate it across passes
     buf = doc.tobytes()
     working_doc = fitz.open(stream=buf, filetype="pdf")
