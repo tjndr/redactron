@@ -204,29 +204,57 @@ Understanding how each field type is matched prevents surprises:
 | Account numbers | Exact digit match (separators stripped) | Fuzzy on digits causes catastrophic over-redaction |
 | Custom patterns | Regex with `re.finditer` | Exact by definition |
 
+### Numeric tokens — exact-match only (guaranteed)
+
+**Numeric tokens are never fuzzy-matched.** This is a hard guarantee, not a configuration option.
+
+A span is considered numeric if it contains only digits, spaces, hyphens, dots, and commas — for example:
+- `103 9.22` (table cell with embedded space)
+- `1,234.56` (formatted number)
+- `95020` (ZIP code)
+- `1234-5678` (reference number)
+
+When the address detector encounters a numeric span, it logs a `WARNING` and skips fuzzy comparison:
+
+```
+WARNING Skipping fuzzy match for numeric span '103 9.22' (exact-match only).
+        This prevents over-redaction of unrelated digits.
+```
+
+This prevents table columns with quantities, prices, or reference numbers from being accidentally redacted because they share digits with a ZIP code or house number in your profile address.
+
+### Safety-net multi-pass — normal operation, not an error
+
+After applying redactions, the pipeline re-extracts the redacted PDF and re-runs all detectors (up to 3 passes total). If pass 2 or 3 finds additional spans, they are redacted and an **INFO** message is logged:
+
+```
+Pass 2 supplemented pass 1 with 2 additional spans; output is complete.
+(Detector gap on this input; please report if reproducible on a non-edge-case PDF.)
+```
+
+**This is normal.** Many edge-case PDFs (complex layouts, multi-column tables, OCR artifacts) trigger the safety net. The output is always complete and correct — the safety net is a defense-in-depth mechanism, not a sign of failure. You do not need to take any action.
+
+`WARNING`-level messages in the pipeline are reserved for actual problems: a redaction bbox rejected as too large, or `MAX_PASSES` exceeded on pathological input.
+
+### Reports — written by default
+
+Every successful `redactron run` writes two report files alongside the redacted PDF:
+
+```
+doc_redacted.pdf        ← redacted document
+doc_redacted.report.md  ← human-readable Markdown report
+doc_redacted.report.json ← machine-readable JSON report
+```
+
+Reports include: filename, pages processed, items detected/redacted, verification status, and any survivors. To opt out:
+
+```bash
+redactron run document.pdf --no-report
+```
+
 ### Exhaustive detection
 
 Every detector scans **all occurrences** on every page. If an account number appears in the header, body table, and footer of a PDF, all three are detected and redacted. There is no deduplication by text value — each bbox span is a separate redaction target.
-
-### Safety-net multi-pass
-
-After applying redactions, the pipeline re-extracts the redacted PDF and re-runs all detectors (up to 3 passes total). If survivors are found in pass 2 or 3, they are redacted immediately and a warning is logged:
-
-```
-Safety pass 2: 3 SURVIVORS detected — first-pass missed these. Redacting.
-WARNING: First-pass detection missed 3 spans that the safety net caught.
-```
-
-This is a **runtime correctness mechanism** — it guarantees the output is clean even if a detector has a gap. The M3 verifier (BLD-13) is a separate **audit mechanism** that produces an external report for user trust and compliance. Defense in depth: safety net catches runtime gaps; verifier provides audit evidence.
-
-If redaction does not converge after 3 passes (pathological input), the pipeline raises `RedactionError` rather than silently producing incomplete output.
-
-
-
-1. `_is_address_candidate()` — rejects any span that is purely numeric or shorter than 5 characters before any fuzzy comparison is attempted
-2. An assertion in the matching loop that fires if a numeric-normalized form reaches the fuzzy step
-
-This guarantees that table columns with quantities (1, 4, 9, 11, 37...) or prices ($1.23, $5.67...) are never redacted due to substring matches against a ZIP code or house number in the profile address.
 
 ---
 
