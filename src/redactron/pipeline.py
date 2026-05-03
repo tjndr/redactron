@@ -92,6 +92,7 @@ def run_pipeline(
     score_threshold: float = 0.5,
     verify: bool = True,
     write_reports: bool = True,
+    ocr_enabled: bool = False,
 ) -> PipelineResult:
     """Run the full redaction pipeline with safety-net multi-pass.
 
@@ -105,6 +106,7 @@ def run_pipeline(
         profile: Loaded and validated Profile.
         score_threshold: Minimum score for Presidio detections.
         verify: Whether to run post-redaction verification.
+        ocr_enabled: If True, OCR image-only pages and paint redactions.
 
     Returns:
         PipelineResult with detections, safety_passes, and verification status.
@@ -124,16 +126,18 @@ def run_pipeline(
     total_chars = sum(len(page.get_text()) for page in doc)
     has_images = any(page.get_images() for page in doc)
     if total_chars < 50 and has_images:
-        doc.close()
-        raise NoTextLayerError(
-            "❌ This PDF appears to be a scan or image-only document with no text layer.\n"
-            "Redactron cannot detect text without OCR.\n"
-            "OCR support is coming in v1 milestone M4. Until then:\n"
-            "  1. Re-export from source application with 'searchable text', OR\n"
-            "  2. Run an OCR tool first (e.g., `ocrmypdf input.pdf output.pdf`)\n"
-            "     and pass the OCR'd file to redactron.\n"
-            "Run with --debug to see per-page character counts."
-        )
+        if not ocr_enabled:
+            doc.close()
+            raise NoTextLayerError(
+                "❌ This PDF appears to be a scan or image-only document with no text layer.\n"
+                "Redactron cannot detect text without OCR.\n"
+                "Re-run with --ocr to enable OCR fallback, or:\n"
+                "  1. Re-export from source application with 'searchable text', OR\n"
+                "  2. Run an OCR tool first (e.g., `ocrmypdf input.pdf output.pdf`)\n"
+                "     and pass the OCR'd file to redactron.\n"
+                "Run with --debug to see per-page character counts."
+            )
+        log.info("Image-only PDF detected; OCR fallback enabled.")
     # Work on an in-memory copy; mutate it across passes
     buf = doc.tobytes()
     working_doc = fitz.open(stream=buf, filetype="pdf")
@@ -186,6 +190,10 @@ def run_pipeline(
             "Safety net supplemented pass 1 on %d occasion(s); output is complete.",
             safety_passes,
         )
+
+    # OCR pass: paint redactions on image-only pages
+    if ocr_enabled:
+        _apply_ocr_redactions(working_doc, profile)
 
     # Save the final working doc
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -257,3 +265,32 @@ def _overlaps_any(
         if x0 < px1 and x1 > px0 and y0 < py1 and y1 > py0:
             return True
     return False
+
+
+def _apply_ocr_redactions(doc: fitz.Document, profile: Profile) -> None:
+    """OCR image-only pages and paint black over PII words.
+
+    Builds a set of PII strings from the profile (display_name, aliases,
+    phones, emails, SSNs) and matches them against OCR word text.
+    """
+    from redactron.extract.ocr import ocr_document, paint_ocr_redactions
+
+    pii_texts: set[str] = set()
+    subj = profile.subject
+    for part in subj.display_name.split():
+        pii_texts.add(part)
+    for alias in subj.aliases:
+        for part in alias.split():
+            pii_texts.add(part)
+    pii_texts.update(subj.phones)
+    pii_texts.update(subj.emails)
+    pii_texts.update(subj.ssns)
+    for an in subj.account_numbers:
+        pii_texts.add(an.value)
+
+    ocr_results = ocr_document(doc)
+    for page_result in ocr_results:
+        page = doc[page_result.page_num]
+        count = paint_ocr_redactions(page, page_result.words, pii_texts)
+        if count:
+            log.info("OCR page %d: painted %d redaction(s)", page_result.page_num, count)
