@@ -5,6 +5,7 @@ The profile.yaml file describes the subject's PII and detection settings.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Annotated
 
@@ -26,6 +27,16 @@ class CustomPattern(BaseModel):
 
     name: str
     regex: str
+
+    @field_validator("regex")
+    @classmethod
+    def regex_is_valid(cls, v: str) -> str:
+        """Ensure the regex compiles without error."""
+        try:
+            re.compile(v)
+        except re.error as exc:
+            raise ValueError(f"Invalid regex {v!r}: {exc}") from exc
+        return v
 
 
 class Subject(BaseModel):
