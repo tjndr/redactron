@@ -394,6 +394,101 @@ def _dry_run_pipeline(
 
 
 # ---------------------------------------------------------------------------
+# verify command
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def verify(
+    path: Path = typer.Argument(..., help="Redacted PDF to verify."),
+    profile: str = typer.Option("", "--profile", "-p", help="Profile YAML path."),
+    threshold: float = typer.Option(0.5, "--threshold", "-t", help="Detection score threshold."),
+    json_output: bool = typer.Option(False, "--json", help="Output result as JSON."),
+    debug: bool = typer.Option(False, "--debug", help="Show full stack traces on error."),
+) -> None:
+    """Verify a redacted PDF for PII survivors.
+
+    Exits 0 if clean, 1 if survivors found.
+    """
+    from redactron.extract.text_layer import open_pdf
+    from redactron.profile import load_profile
+    from redactron.verify.verifier import verify_redaction
+
+    profile_path = Path(profile) if profile else default_profile_path()
+    try:
+        loaded_profile = load_profile(profile_path)
+    except ProfileValidationError as exc:
+        _error(str(exc), debug=debug, exc=exc)
+        return
+
+    try:
+        doc = open_pdf(path)
+        result = verify_redaction(doc, loaded_profile, score_threshold=threshold)
+    except RedactronError as exc:
+        _error(str(exc), debug=debug, exc=exc)
+        return
+
+    if json_output:
+        import json as _json
+        typer.echo(_json.dumps({
+            "passed": result.passed,
+            "survivors": [s.text for s in result.survivors],
+            "duration_ms": result.duration_ms,
+        }, indent=2))
+    else:
+        if result.passed:
+            ms = result.duration_ms
+            typer.echo(f"✅ {path.name}: clean — no PII survivors detected ({ms}ms)")
+        else:
+            typer.echo(
+                f"❌ {path.name}: {len(result.survivors)} PII survivor(s) detected:",
+                err=True,
+            )
+            for s in result.survivors:
+                typer.echo(f"  page {s.page_num}: [{s.entity_type}] {s.text!r}", err=True)
+
+    if not result.passed:
+        raise typer.Exit(1)
+
+
+# ---------------------------------------------------------------------------
+# log command
+# ---------------------------------------------------------------------------
+
+
+@app.command("log")
+def log_cmd(
+    subject: str = typer.Option("", "--subject", "-s", help="Filter by subject slug."),
+    limit: int = typer.Option(20, "--limit", "-n", help="Number of rows to show."),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON."),
+) -> None:
+    """Show recent audit log entries."""
+    from redactron.audit.log import get_runs
+
+    rows = get_runs(subject_id=subject or None, limit=limit)
+
+    if json_output:
+        import json as _json
+        typer.echo(_json.dumps(rows, indent=2, default=str))
+        return
+
+    if not rows:
+        typer.echo("No audit log entries found.")
+        return
+
+    typer.echo(f"{'ID':>4}  {'File':<30} {'Subject':<15} {'Det':>4} {'V':>1}  Processed")
+    typer.echo("-" * 80)
+    for r in rows:
+        fname = (r.get("original_filename") or "")[:28]
+        subj = (r.get("subject_id") or "")[:13]
+        det = r.get("items_detected", 0)
+        vp = r.get("verification_passed")
+        v_icon = "✅" if vp == 1 else ("❌" if vp == 0 else "-")
+        ts = str(r.get("processed_at", ""))[:19]
+        typer.echo(f"{r['id']:>4}  {fname:<30} {subj:<15} {det:>4} {v_icon}  {ts}")
+
+
+# ---------------------------------------------------------------------------
 # report command
 # ---------------------------------------------------------------------------
 
