@@ -70,7 +70,7 @@ def test_run_produces_output_file(tmp_path: Path) -> None:
 def test_run_json_output(tmp_path: Path) -> None:
     import json
     pdf = _make_pdf_file(tmp_path)
-    result = runner.invoke(app, ["run", str(pdf), "--no-verify", "--json"])
+    result = CliRunner(mix_stderr=False).invoke(app, ["run", str(pdf), "--no-verify", "--json"])
     assert result.exit_code == 0
     data = json.loads(result.output)
     assert isinstance(data, list)
@@ -125,7 +125,7 @@ def test_batch_json_output_has_all_entries(tmp_path: Path) -> None:
     pdf_dir.mkdir()
     for i in range(3):
         _make_pdf_file(pdf_dir, f"doc{i}.pdf")
-    result = runner.invoke(
+    result = CliRunner(mix_stderr=False).invoke(
         app, ["run", str(pdf_dir), "--no-verify", "--json"]
     )
     assert result.exit_code == 0
