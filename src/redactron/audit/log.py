@@ -186,3 +186,76 @@ def get_runs(
         return [dict(r) for r in rows]
     finally:
         conn.close()
+
+
+def add_subject(subject_id: str, display_name: str, db: Path | None = None) -> None:
+    """Create or update a subject entry.
+
+    Args:
+        subject_id: Unique slug identifier.
+        display_name: Human-readable name.
+        db: Optional path override.
+    """
+    path = db or _db_path()
+    conn = _connect(path)
+    try:
+        migrate(conn)
+        now = datetime.now(UTC).isoformat()
+        conn.execute(
+            """
+            INSERT INTO subjects (id, display_name, created_at, last_used_at, document_count)
+            VALUES (?, ?, ?, ?, 0)
+            ON CONFLICT(id) DO UPDATE SET display_name = excluded.display_name
+            """,
+            (subject_id, display_name, now, now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def list_subjects(db: Path | None = None) -> list[dict]:  # type: ignore[type-arg]
+    """Return all subjects ordered by last_used_at desc.
+
+    Args:
+        db: Optional path override.
+
+    Returns:
+        List of dicts with subject row data.
+    """
+    path = db or _db_path()
+    if not path.exists():
+        return []
+    conn = _connect(path)
+    try:
+        migrate(conn)
+        rows = conn.execute(
+            "SELECT * FROM subjects ORDER BY last_used_at DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_subject(subject_id: str, db: Path | None = None) -> dict | None:  # type: ignore[type-arg]
+    """Fetch a single subject by ID.
+
+    Args:
+        subject_id: The subject slug.
+        db: Optional path override.
+
+    Returns:
+        Dict with subject data, or None if not found.
+    """
+    path = db or _db_path()
+    if not path.exists():
+        return None
+    conn = _connect(path)
+    try:
+        migrate(conn)
+        row = conn.execute(
+            "SELECT * FROM subjects WHERE id = ?", (subject_id,)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
