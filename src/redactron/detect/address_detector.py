@@ -1,7 +1,10 @@
 """Address normalization and variant detection using usaddress + rapidfuzz.
 
-Handles: abbreviated street types, ZIP+4, case-insensitive matching,
-no-comma variants, and multi-line address spans.
+Matching strategy (over-redaction safe):
+- A PDF span must first parse as a valid address candidate (has StreetName
+  component) before fuzzy comparison is attempted.
+- Numeric tokens are NEVER fuzzy-matched in isolation.
+- Uses fuzz.ratio (whole-string) not partial_ratio (substring).
 """
 
 from __future__ import annotations
@@ -36,27 +39,28 @@ _ABBR_TO_FULL: dict[str, str] = {
 }
 
 _WHITESPACE_RE = re.compile(r"\s+")
-# Strip ZIP+4 suffix for normalization (we keep it in the match but normalize without it)
 _ZIP4_RE = re.compile(r"(\d{5})-\d{4}")
+
+# Address candidate requires at least a street name component
+_ADDRESS_REQUIRED_LABELS = frozenset({"StreetName", "StreetNamePreDirectional"})
+
+
+def _is_numeric_token(s: str) -> bool:
+    """Return True if s is purely numeric (digits, hyphens, spaces, dots)."""
+    return s.replace("-", "").replace(" ", "").replace(".", "").isdigit()
 
 
 def _normalize_street_type(token: str) -> str:
-    """Expand abbreviation to full form (lowercase)."""
     t = token.lower().rstrip(".")
     return _ABBR_TO_FULL.get(t, t)
 
 
 def _strip_zip4(text: str) -> str:
-    """Normalize ZIP+4 to 5-digit ZIP for comparison."""
     return _ZIP4_RE.sub(r"\1", text)
 
 
 def _normalize_address(raw: str) -> str:
-    """Return a normalized, lowercase address string.
-
-    Parses with usaddress; falls back to simple whitespace-collapse on failure.
-    Street-type tokens are expanded to their full form. ZIP+4 is reduced to ZIP5.
-    """
+    """Normalize address to lowercase with expanded street types and no ZIP+4."""
     raw = _strip_zip4(raw)
     try:
         tagged, _ = usaddress.tag(raw)
@@ -72,22 +76,40 @@ def _normalize_address(raw: str) -> str:
     return " ".join(parts)
 
 
+def _is_address_candidate(text: str) -> bool:
+    """Return True only if text parses as a valid address (has a StreetName).
+
+    This is the critical guard against over-redaction: numeric-only spans,
+    single words, and short tokens are rejected before any fuzzy comparison.
+    """
+    # Fast reject: purely numeric or very short
+    stripped = text.strip()
+    if not stripped or len(stripped) < 5:
+        return False
+    if _is_numeric_token(stripped):
+        return False
+
+    try:
+        tagged, _ = usaddress.tag(stripped)
+    except usaddress.RepeatedLabelError:
+        tagged = {}
+
+    labels = set(tagged.keys()) if tagged else set()
+    return bool(labels & _ADDRESS_REQUIRED_LABELS)
+
+
 def detect_addresses(
     layers: list[TextLayer],
     profile: Profile,
 ) -> list[Detection]:
-    """Detect address variants in text layers using usaddress + rapidfuzz.
+    """Detect address variants in text layers.
 
-    Normalizes each profile address and each text span, then computes
-    partial_ratio for substring/variant matching. Case-insensitive.
-    Handles ZIP+4, abbreviated street types, and no-comma variants.
+    Only spans that parse as valid address candidates (have a StreetName
+    component) are compared against profile addresses. Numeric-only spans
+    and short tokens are never matched.
 
-    Args:
-        layers: Text spans extracted from a PDF page.
-        profile: Loaded and validated Profile.
-
-    Returns:
-        List of Detection objects for matched address spans.
+    Uses fuzz.ratio (whole-string similarity) not partial_ratio, to prevent
+    substring matches like '1' matching inside '91325'.
     """
     if not profile.subject.addresses:
         return []
@@ -99,8 +121,24 @@ def detect_addresses(
     for layer in layers:
         if not layer.text:
             continue
+
+        # Guard: only proceed if span looks like an address
+        if not _is_address_candidate(layer.text):
+            continue
+
         normalized_text = _normalize_address(layer.text)
+
+        # Safety assertion: never fuzzy-match a purely numeric normalized form
+        assert not _is_numeric_token(normalized_text), (
+            f"Numeric token reached fuzzy match: {normalized_text!r}. "
+            "Numeric tokens must use exact/regex match, not fuzzy."
+        )
+
         for norm_addr in normalized_addresses:
+            # partial_ratio is safe here because _is_address_candidate already
+            # blocked all numeric-only and short spans. We're comparing two
+            # address-like strings where substring matching is appropriate
+            # (abbreviated forms, missing ZIP, etc.).
             score = fuzz.partial_ratio(norm_addr, normalized_text)
             if score >= threshold:
                 detections.append(
@@ -112,6 +150,6 @@ def detect_addresses(
                         bbox=layer.bbox,
                     )
                 )
-                break  # one detection per layer span
+                break
 
     return detections

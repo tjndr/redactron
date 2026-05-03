@@ -158,6 +158,26 @@ Run with `--debug` to see the full Pydantic traceback.
 
 ---
 
+## Matching semantics
+
+Understanding how each field type is matched prevents surprises:
+
+| Field type | Matching strategy | Why |
+|---|---|---|
+| Names | Whole-string fuzzy (`token_set_ratio`) against full span | Aliases are complete strings, not tokens |
+| Addresses | Span must parse as address first, then `partial_ratio` | Prevents numeric substrings from matching |
+| Account numbers | Exact digit match (separators stripped) | Fuzzy on digits causes catastrophic over-redaction |
+| Custom patterns | Regex with `re.finditer` | Exact by definition |
+
+**Numeric tokens are NEVER fuzzy-matched in isolation.** This is enforced by:
+
+1. `_is_address_candidate()` — rejects any span that is purely numeric or shorter than 5 characters before any fuzzy comparison is attempted
+2. An assertion in the matching loop that fires if a numeric-normalized form reaches the fuzzy step
+
+This guarantees that table columns with quantities (1, 4, 9, 11, 37...) or prices ($1.23, $5.67...) are never redacted due to substring matches against a ZIP code or house number in the profile address.
+
+---
+
 ## v2 backlog
 
 - Cross-page address split detection

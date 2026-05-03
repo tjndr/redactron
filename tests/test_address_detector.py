@@ -188,3 +188,53 @@ def test_multi_line_address_each_line_detected() -> None:
     result = detect_addresses(layers, _addr_profile())
     # At least the street line should match
     assert any("Phillip" in d.text for d in result)
+
+
+# --- Over-redaction regression tests (BLD-30 bug fix) ---
+# Profile address: "100 Phillip Street, San Jose, CA 91325, USA"
+
+_OVER_REDACT_PROFILE = Profile(
+    subject=Subject(display_name="Test", addresses=["100 Phillip Street, San Jose, CA 91325, USA"]),
+    detection=DetectionConfig(match_threshold=0.85),
+)
+
+
+def test_quantity_column_numbers_not_redacted() -> None:
+    """Single digits and short numbers from a table column must NOT be redacted."""
+    table_values = ["1", "4", "9", "11", "37", "10", "100", "333"]
+    layers = [_layer(v) for v in table_values]
+    result = detect_addresses(layers, _over_redact_profile())
+    assert result == [], f"Over-redaction: {[d.text for d in result]}"
+
+
+def _over_redact_profile() -> Profile:
+    return _OVER_REDACT_PROFILE
+
+
+def test_standalone_zip_not_redacted() -> None:
+    """Standalone ZIP code '91325' (not in address context) must NOT be redacted."""
+    layers = [_layer("91325")]  # e.g. a product SKU in a table cell
+    result = detect_addresses(layers, _over_redact_profile())
+    assert result == [], f"Standalone ZIP should not be redacted, got: {[d.text for d in result]}"
+
+
+def test_full_address_with_zip_is_redacted() -> None:
+    """Full address including ZIP is redacted."""
+    layers = [_layer("100 Phillip Street, San Jose, CA 91325")]
+    result = detect_addresses(layers, _over_redact_profile())
+    assert len(result) == 1
+
+
+def test_zip4_in_full_address_is_redacted() -> None:
+    """Full address with ZIP+4 is redacted."""
+    layers = [_layer("100 Phillip Street, San Jose, CA 91325-1234")]
+    result = detect_addresses(layers, _over_redact_profile())
+    assert len(result) == 1
+
+
+def test_partial_zip_numbers_not_redacted() -> None:
+    """Numbers that are substrings of ZIP (91, 325, 9132, 1325) must NOT be redacted."""
+    partial_zips = ["91", "325", "9132", "1325", "19325"]
+    layers = [_layer(v) for v in partial_zips]
+    result = detect_addresses(layers, _over_redact_profile())
+    assert result == [], f"Partial ZIP substrings should not be redacted: {[d.text for d in result]}"

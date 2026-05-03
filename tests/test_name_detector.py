@@ -167,3 +167,11 @@ def test_corporate_llc_suppressed() -> None:
     layers = [_layer("Tejinder Singh LLC")]
     result = detect_names(layers, _tejinder_profile())
     assert result == []
+
+
+def test_sub_tokens_of_name_not_redacted() -> None:
+    """Single chars and short sub-tokens of the name must NOT be redacted."""
+    sub_tokens = ["T", "S", "Te", "Si", "Tej"]
+    layers = [_layer(t) for t in sub_tokens]
+    result = detect_names(layers, _tejinder_profile())
+    assert result == [], f"Sub-tokens should not be redacted: {[d.text for d in result]}"
