@@ -5,7 +5,10 @@ from __future__ import annotations
 import json as json_mod
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from redactron.vault.store import VaultStore
 
 import typer
 
@@ -516,3 +519,224 @@ def report(
 
 if __name__ == "__main__":
     app()
+
+
+# ---------------------------------------------------------------------------
+# vault subcommand group (M3.5)
+# ---------------------------------------------------------------------------
+
+vault_app = typer.Typer(name="vault", help="Manage the encrypted profile vault.")
+app.add_typer(vault_app)
+
+
+def _default_vault_path() -> Path:
+    return Path.home() / ".redactron" / "vault.enc"
+
+
+def _get_vault_store() -> VaultStore:  # noqa: F821
+    from redactron.vault.keychain import get_keychain_backend
+    from redactron.vault.store import VaultStore
+
+    return VaultStore(_default_vault_path(), get_keychain_backend())
+
+
+@vault_app.command("init")
+def vault_init() -> None:
+    """Create the encrypted vault and store master key in macOS Keychain."""
+    from redactron.vault.keychain import get_keychain_backend
+    from redactron.vault.store import VaultStore
+
+    vault_path = _default_vault_path()
+    if vault_path.exists():
+        typer.echo(f"Vault already exists: {vault_path}")
+        raise typer.Exit()
+
+    store = VaultStore(vault_path, get_keychain_backend())
+    store.save({"version": 1, "profiles": {}})
+    typer.echo(f"✅ Vault created: {vault_path}")
+    typer.echo("Add profiles with: redactron profile add --client <id>")
+
+
+# ---------------------------------------------------------------------------
+# profile subcommand group (M3.5)
+# ---------------------------------------------------------------------------
+
+profile_app = typer.Typer(name="profile", help="Manage encrypted client profiles.")
+app.add_typer(profile_app)
+
+
+def _mask_value(value: str, keep_last: int = 4) -> str:
+    """Mask a string, keeping only the last N characters."""
+    if len(value) <= keep_last:
+        return value
+    return "*" * (len(value) - keep_last) + value[-keep_last:]
+
+
+def _mask_profile(profile_dict: dict) -> dict:  # type: ignore[type-arg]
+    """Return a copy of profile_dict with PII values masked."""
+    import copy
+
+    masked = copy.deepcopy(profile_dict)
+    subj = masked.get("subject", {})
+    if subj.get("display_name"):
+        parts = subj["display_name"].split()
+        subj["display_name"] = " ".join(
+            (p[0] + "***") if len(p) > 1 else p for p in parts
+        )
+    for field in ("phones", "emails", "ssns", "addresses"):
+        if subj.get(field):
+            subj[field] = [_mask_value(str(v)) for v in subj[field]]
+    if subj.get("account_numbers"):
+        subj["account_numbers"] = [
+            {**a, "value": _mask_value(str(a.get("value", "")))}
+            for a in subj["account_numbers"]
+        ]
+    return masked
+
+
+@profile_app.command("add")
+def profile_add(
+    client: str = typer.Option(..., "--client", "-c", help="Client ID slug."),
+    display_name: str = typer.Option("", "--name", "-n", help="Display name."),
+    from_yaml: str = typer.Option("", "--from", help="Import from YAML file."),
+) -> None:
+    """Add a new client profile to the vault."""
+    from redactron.profile import load_profile
+
+    store = _get_vault_store()
+
+    if from_yaml:
+        profile_obj = load_profile(Path(from_yaml))
+        profile_dict = profile_obj.model_dump(mode="json")
+        name = display_name or profile_obj.subject.display_name
+    else:
+        if not display_name:
+            display_name = typer.prompt("Display name")
+        profile_dict = {"subject": {"display_name": display_name}, "detection": {}}
+        name = display_name
+
+    try:
+        store.add_profile(client, profile_dict, name)
+        typer.echo(f"✅ Profile '{client}' ({name}) added to vault.")
+    except Exception as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+@profile_app.command("list")
+def profile_list() -> None:
+    """List all client profiles (no PII shown)."""
+    store = _get_vault_store()
+    metas = store.list_profiles()
+    if not metas:
+        typer.echo("No profiles found. Use `redactron profile add --client <id>`.")
+        return
+    typer.echo(f"{'Client ID':<20}  {'Display Name':<30}  Created")
+    typer.echo("-" * 70)
+    for m in metas:
+        typer.echo(f"{m.client_id:<20}  {m.display_name:<30}  {m.created_at[:10]}")
+
+
+@profile_app.command("show")
+def profile_show(
+    client: str = typer.Argument(..., help="Client ID to show."),
+    reveal: bool = typer.Option(
+        False, "--reveal", help="Show unmasked values (requires Touch ID)."
+    ),
+) -> None:
+    """Show a client profile. Values are masked by default."""
+    import sys
+
+    import yaml
+
+    store = _get_vault_store()
+    profile_dict = store.get_profile(client)
+    if profile_dict is None:
+        typer.echo(f"Profile '{client}' not found.", err=True)
+        raise typer.Exit(1)
+
+    if reveal:
+        if not sys.stdin.isatty():
+            typer.echo("Error: --reveal requires an interactive terminal.", err=True)
+            raise typer.Exit(1)
+        confirm = typer.confirm(
+            "⚠️  This will display unmasked PII. Are you sure?", default=False
+        )
+        if not confirm:
+            typer.echo("Aborted.")
+            raise typer.Exit()
+        # Touch ID is triggered by the vault open() call already made above.
+        typer.echo(yaml.dump(profile_dict, default_flow_style=False))
+    else:
+        typer.echo(yaml.dump(_mask_profile(profile_dict), default_flow_style=False))
+
+
+@profile_app.command("delete")
+def profile_delete(
+    client: str = typer.Argument(..., help="Client ID to delete."),
+) -> None:
+    """Delete a client profile from the vault."""
+    confirm = typer.confirm(f"Delete profile '{client}'?", default=False)
+    if not confirm:
+        typer.echo("Aborted.")
+        raise typer.Exit()
+    store = _get_vault_store()
+    store.delete_profile(client)
+    typer.echo(f"Profile '{client}' deleted.")
+
+
+@profile_app.command("rename")
+def profile_rename(
+    old_id: str = typer.Argument(..., help="Current client ID."),
+    new_id: str = typer.Argument(..., help="New client ID."),
+) -> None:
+    """Rename a client profile."""
+    store = _get_vault_store()
+    try:
+        store.rename_profile(old_id, new_id)
+        typer.echo(f"Profile '{old_id}' renamed to '{new_id}'.")
+    except Exception as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+@profile_app.command("edit")
+def profile_edit(
+    client: str = typer.Argument(..., help="Client ID to edit."),
+) -> None:
+    """Open profile in $EDITOR, re-encrypt on save. Temp file is secure-wiped."""
+    import os
+    import subprocess
+    import tempfile
+
+    import yaml
+
+    store = _get_vault_store()
+    profile_dict = store.get_profile(client)
+    if profile_dict is None:
+        typer.echo(f"Profile '{client}' not found.", err=True)
+        raise typer.Exit(1)
+
+    editor = os.environ.get("EDITOR", "vi")
+    with tempfile.NamedTemporaryFile(
+        suffix=".yaml", mode="w", delete=False, prefix=f"redactron_{client}_"
+    ) as tmp:
+        tmp_path = Path(tmp.name)
+        tmp.write(yaml.dump(profile_dict, default_flow_style=False))
+
+    try:
+        tmp_path.chmod(0o600)
+        subprocess.run([editor, str(tmp_path)], check=True)
+        updated = yaml.safe_load(tmp_path.read_text())
+        store.update_profile(client, updated)
+        typer.echo(f"✅ Profile '{client}' updated.")
+    except Exception as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    finally:
+        # Secure-wipe: overwrite with random bytes then unlink
+        if tmp_path.exists():
+            size = tmp_path.stat().st_size
+            with tmp_path.open("wb") as fh:
+                fh.write(os.urandom(max(size, 1)))
+            tmp_path.unlink()
