@@ -278,6 +278,122 @@ def subject_show(
 
 
 # ---------------------------------------------------------------------------
+# dry-run command
+# ---------------------------------------------------------------------------
+
+
+@app.command("dry-run")
+def dry_run(
+    path: Path = typer.Argument(..., help="PDF file or directory to scan."),
+    profile: str = typer.Option("", "--profile", "-p", help="Profile YAML path."),
+    threshold: float = typer.Option(0.5, "--threshold", "-t", help="Detection score threshold."),
+    json_output: bool = typer.Option(False, "--json", help="Output results as JSON."),
+    debug: bool = typer.Option(False, "--debug", help="Show full stack traces on error."),
+) -> None:
+    """Show what would be redacted without writing any output files.
+
+    Exits 0 if detections found, 1 if none.
+    """
+    from redactron.profile import load_profile
+
+    profile_path = Path(profile) if profile else default_profile_path()
+    try:
+        loaded_profile = load_profile(profile_path)
+    except ProfileValidationError as exc:
+        _error(str(exc), debug=debug, exc=exc)
+        return
+
+    pdfs = _collect_pdfs(path)
+    if not pdfs:
+        typer.echo("No PDF files found.", err=True)
+        raise typer.Exit(1)
+
+    try:
+        all_detections = _dry_run_pipeline(pdfs, loaded_profile, threshold)
+    except RedactronError as exc:
+        _error(str(exc), debug=debug, exc=exc)
+        return
+
+    if json_output:
+        import json as _json
+        typer.echo(_json.dumps(
+            [
+                {
+                    "file": str(d["file"]),
+                    "page": d["page"],
+                    "entity_type": d["entity_type"],
+                    "text": d["text"],
+                    "score": d["score"],
+                }
+                for d in all_detections
+            ],
+            indent=2,
+        ))
+    else:
+        if not all_detections:
+            typer.echo("No PII detected.")
+            raise typer.Exit(1)
+        # Print table
+        typer.echo(f"{'File':<30} {'Page':>4}  {'Type':<20} {'Score':>5}  Text")
+        typer.echo("-" * 90)
+        for d in all_detections:
+            fname = Path(str(d["file"])).name[:28]
+            text_preview = str(d["text"])[:40]
+            score = d["score"]
+            etype = d["entity_type"]
+            typer.echo(f"{fname:<30} {d['page']:>4}  {etype:<20} {score:>5.2f}  {text_preview}")
+        typer.echo(f"\n{len(all_detections)} detection(s) across {len(pdfs)} file(s).")
+
+    if not all_detections:
+        raise typer.Exit(1)
+
+
+def _dry_run_pipeline(
+    pdfs: list[Path],
+    profile: Profile,
+    score_threshold: float,
+) -> list[dict]:  # type: ignore[type-arg]
+    """Run extract+detect only; return list of detection dicts."""
+    from redactron.detect.account_detector import detect_custom_patterns
+    from redactron.detect.address_detector import detect_addresses
+    from redactron.detect.name_detector import detect_names
+    from redactron.extract.text_layer import extract_text_layers, open_pdf
+    from redactron.redact.partial import detect_account_numbers
+
+    results = []
+    for pdf_path in pdfs:
+        doc = open_pdf(pdf_path)
+        layers = extract_text_layers(doc)
+
+        detections = []
+        detections.extend(detect_names(layers, profile))
+        detections.extend(detect_addresses(layers, profile))
+        detections.extend(detect_account_numbers(doc, profile))
+        detections.extend(detect_custom_patterns(layers, profile))
+
+        if profile.detection.use_presidio and profile.detection.presidio_entities:
+            from redactron.detect.presidio_detector import detect as presidio_detect
+            detections.extend(
+                presidio_detect(
+                    layers,
+                    entities=list(profile.detection.presidio_entities),
+                    score_threshold=score_threshold,
+                )
+            )
+
+        for det in detections:
+            results.append({
+                "file": pdf_path,
+                "page": det.page_num,
+                "entity_type": det.entity_type,
+                "text": det.text,
+                "score": det.score,
+            })
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # report command
 # ---------------------------------------------------------------------------
 
