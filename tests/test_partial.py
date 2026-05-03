@@ -211,3 +211,23 @@ def test_detect_multipage_pdf() -> None:
     detections = detect_account_numbers(doc2, profile)
     assert len(detections) >= 1
     assert detections[0].page_num == 1
+
+
+# --- Account number multi-line test (STEP 3) ---
+
+import pytest as _pytest
+
+
+@_pytest.mark.skip(
+    reason=(
+        "v1 limitation: account numbers split across line breaks are not supported. "
+        "PyMuPDF rawdict processes spans independently; a hyphenated number split "
+        "across lines appears as two separate spans with no structural link. "
+        "Documented in docs/PROFILE.md. Add to v2 backlog."
+    )
+)
+def test_account_number_split_across_lines() -> None:
+    """Account number split across a line break — both halves redacted."""
+    # This would require cross-span joining logic in detect_account_numbers,
+    # which is deferred to v2.
+    pass
