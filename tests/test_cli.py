@@ -101,3 +101,71 @@ def test_run_with_verify(tmp_path: Path) -> None:
     result = runner.invoke(app, ["run", str(pdf)])
     assert result.exit_code == 0
     assert "✓" in result.output
+
+
+def test_batch_progress_produces_all_outputs(tmp_path: Path) -> None:
+    """Batch run on 5 PDFs produces 5 output files (progress bar enabled)."""
+    pdf_dir = tmp_path / "in"
+    pdf_dir.mkdir()
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    for i in range(5):
+        _make_pdf_file(pdf_dir, f"file{i}.pdf")
+    result = runner.invoke(
+        app, ["run", str(pdf_dir), "--output", str(out_dir), "--no-verify"]
+    )
+    assert result.exit_code == 0
+    assert len(list(out_dir.glob("*.pdf"))) == 5
+
+
+def test_batch_json_output_has_all_entries(tmp_path: Path) -> None:
+    """Batch --json output contains one entry per PDF."""
+    import json
+    pdf_dir = tmp_path / "in"
+    pdf_dir.mkdir()
+    for i in range(3):
+        _make_pdf_file(pdf_dir, f"doc{i}.pdf")
+    result = runner.invoke(
+        app, ["run", str(pdf_dir), "--no-verify", "--json"]
+    )
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert len(data) == 3
+
+
+def test_collect_pdfs_single_file(tmp_path: Path) -> None:
+    """_collect_pdfs returns single file as list."""
+    from redactron.cli import _collect_pdfs
+    pdf = _make_pdf_file(tmp_path)
+    assert _collect_pdfs(pdf) == [pdf]
+
+
+def test_collect_pdfs_directory(tmp_path: Path) -> None:
+    """_collect_pdfs returns all PDFs in directory, sorted."""
+    from redactron.cli import _collect_pdfs
+    for name in ["b.pdf", "a.pdf", "c.pdf"]:
+        _make_pdf_file(tmp_path, name)
+    result = _collect_pdfs(tmp_path)
+    assert [p.name for p in result] == ["a.pdf", "b.pdf", "c.pdf"]
+
+
+def test_collect_pdfs_nonexistent_returns_empty(tmp_path: Path) -> None:
+    """_collect_pdfs returns empty list for nonexistent path."""
+    from redactron.cli import _collect_pdfs
+    assert _collect_pdfs(tmp_path / "ghost") == []
+
+
+def test_output_path_single_file(tmp_path: Path) -> None:
+    """_output_path for single file uses stem_redacted.pdf."""
+    from redactron.cli import _output_path
+    p = tmp_path / "doc.pdf"
+    result = _output_path(p, None, False)
+    assert result == tmp_path / "doc_redacted.pdf"
+
+
+def test_output_path_batch_uses_output_dir(tmp_path: Path) -> None:
+    """_output_path in batch mode places file in output dir."""
+    from redactron.cli import _output_path
+    out_dir = tmp_path / "out"
+    result = _output_path(tmp_path / "doc.pdf", out_dir, True)
+    assert result == out_dir / "doc_redacted.pdf"
