@@ -95,3 +95,75 @@ def test_score_in_range() -> None:
     layers = [_layer("Tejinder Singh")]
     result = detect_names(layers, _profile())
     assert all(0.0 <= d.score <= 1.0 for d in result)
+
+
+# --- STEP 4c robustness tests (BLD-30) ---
+# Profile: display_name "Tejinder Singh", aliases ["Tejinder", "T. Singh", "Singh, Tejinder"]
+
+def _tejinder_profile(threshold: float = 0.85) -> Profile:
+    return Profile(
+        subject=Subject(
+            display_name="Tejinder Singh",
+            aliases=["Tejinder", "T. Singh", "Singh, Tejinder"],
+        ),
+        detection=DetectionConfig(match_threshold=threshold, full_token_min_length=2),
+    )
+
+
+def test_full_name_matches() -> None:
+    """'Tejinder Singh' is detected."""
+    layers = [_layer("Tejinder Singh")]
+    assert len(detect_names(layers, _tejinder_profile())) == 1
+
+
+def test_alias_t_singh_matches() -> None:
+    """Alias 'T. Singh' is detected."""
+    layers = [_layer("T. Singh")]
+    assert len(detect_names(layers, _tejinder_profile())) == 1
+
+
+def test_alias_last_first_matches() -> None:
+    """Alias 'Singh, Tejinder' is detected."""
+    layers = [_layer("Singh, Tejinder")]
+    assert len(detect_names(layers, _tejinder_profile())) == 1
+
+
+def test_middle_initial_matches() -> None:
+    """'Tejinder K. Singh' (middle initial) is detected."""
+    layers = [_layer("Tejinder K. Singh")]
+    assert len(detect_names(layers, _tejinder_profile())) == 1
+
+
+def test_uppercase_matches() -> None:
+    """'TEJINDER SINGH' (all caps) is detected."""
+    layers = [_layer("TEJINDER SINGH")]
+    assert len(detect_names(layers, _tejinder_profile())) == 1
+
+
+def test_similar_but_different_not_matched() -> None:
+    """'Tejinder Sharma' is NOT matched when using full-name aliases only."""
+    # Use only full-name aliases (no single-token 'Tejinder' alias)
+    profile = Profile(
+        subject=Subject(
+            display_name="Tejinder Singh",
+            aliases=["T. Singh", "Singh, Tejinder"],  # no bare 'Tejinder'
+        ),
+        detection=DetectionConfig(match_threshold=0.92, full_token_min_length=2),
+    )
+    layers = [_layer("Tejinder Sharma")]
+    result = detect_names(layers, profile)
+    assert result == []
+
+
+def test_corporate_context_suppressed() -> None:
+    """'Singh Industries Inc.' is NOT matched (corporate entity)."""
+    layers = [_layer("Singh Industries Inc.")]
+    result = detect_names(layers, _tejinder_profile())
+    assert result == []
+
+
+def test_corporate_llc_suppressed() -> None:
+    """'Tejinder Singh LLC' is NOT matched."""
+    layers = [_layer("Tejinder Singh LLC")]
+    result = detect_names(layers, _tejinder_profile())
+    assert result == []

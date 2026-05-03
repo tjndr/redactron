@@ -113,3 +113,78 @@ def test_normalize_fallback_on_ambiguous_address() -> None:
     result = _normalize_address("100 Main St, 200 Oak Ave, 300 Pine Rd")
     assert isinstance(result, str)
     assert result == result.lower()
+
+
+# --- STEP 4b robustness tests (BLD-30) ---
+# Profile address: "100 Phillip Street, San Jose, CA 95020, USA"
+
+_PROFILE_ADDR = "100 Phillip Street, San Jose, CA 95020, USA"
+
+
+def _addr_profile(threshold: float = 0.85) -> Profile:
+    return Profile(
+        subject=Subject(display_name="Test", addresses=[_PROFILE_ADDR]),
+        detection=DetectionConfig(match_threshold=threshold),
+    )
+
+
+def test_abbreviated_street_type_matches() -> None:
+    """'100 Phillip St, San Jose, CA 95020' matches profile address."""
+    layers = [_layer("100 Phillip St, San Jose, CA 95020")]
+    result = detect_addresses(layers, _addr_profile())
+    assert len(result) == 1
+
+
+def test_zip4_in_pdf_matches() -> None:
+    """ZIP+4 in PDF ('95020-1234') matches profile with 5-digit ZIP."""
+    layers = [_layer("100 Phillip Street, San Jose, CA 95020-1234")]
+    result = detect_addresses(layers, _addr_profile())
+    assert len(result) == 1
+
+
+def test_case_insensitive_match() -> None:
+    """'100 PHILLIP STREET, SAN JOSE, CA 95020' matches (case-insensitive)."""
+    layers = [_layer("100 PHILLIP STREET, SAN JOSE, CA 95020")]
+    result = detect_addresses(layers, _addr_profile())
+    assert len(result) == 1
+
+
+def test_no_comma_variant_matches() -> None:
+    """'100 Phillip St San Jose CA 95020' (no commas) matches."""
+    layers = [_layer("100 Phillip St San Jose CA 95020")]
+    result = detect_addresses(layers, _addr_profile())
+    assert len(result) == 1
+
+
+def test_different_house_number_not_matched() -> None:
+    """Different house number at high threshold is not matched.
+
+    Note: at default threshold (0.85), '200 Phillip Street' WILL match
+    '100 Phillip Street' because they differ by only 1 character (~97% similar).
+    A threshold >= 0.99 is needed to distinguish house numbers.
+    This is a known limitation documented in docs/PROFILE.md.
+    """
+    layers = [_layer("200 Phillip Street, San Jose, CA 95020")]
+    # At very high threshold, different house number should not match
+    result = detect_addresses(layers, _addr_profile(threshold=0.99))
+    assert result == []
+
+
+def test_completely_different_address_not_matched() -> None:
+    """Unrelated address is not matched."""
+    layers = [_layer("500 Other Ave, Other City, NY 10001")]
+    result = detect_addresses(layers, _addr_profile())
+    assert result == []
+
+
+def test_multi_line_address_each_line_detected() -> None:
+    """Multi-line address: each line that matches is detected separately."""
+    # Each line is a separate TextLayer span in PyMuPDF
+    layers = [
+        _layer("100 Phillip Street"),
+        _layer("San Jose, CA"),
+        _layer("95020"),
+    ]
+    result = detect_addresses(layers, _addr_profile())
+    # At least the street line should match
+    assert any("Phillip" in d.text for d in result)

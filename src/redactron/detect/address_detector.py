@@ -1,7 +1,7 @@
 """Address normalization and variant detection using usaddress + rapidfuzz.
 
-Parses profile addresses with usaddress, normalizes street-type abbreviations,
-then fuzzy-matches normalized forms against extracted text spans.
+Handles: abbreviated street types, ZIP+4, case-insensitive matching,
+no-comma variants, and multi-line address spans.
 """
 
 from __future__ import annotations
@@ -35,9 +35,9 @@ _ABBR_TO_FULL: dict[str, str] = {
     "way": "way",
 }
 
-_FULL_TO_ABBR: dict[str, str] = {v: k for k, v in _ABBR_TO_FULL.items()}
-
 _WHITESPACE_RE = re.compile(r"\s+")
+# Strip ZIP+4 suffix for normalization (we keep it in the match but normalize without it)
+_ZIP4_RE = re.compile(r"(\d{5})-\d{4}")
 
 
 def _normalize_street_type(token: str) -> str:
@@ -46,16 +46,21 @@ def _normalize_street_type(token: str) -> str:
     return _ABBR_TO_FULL.get(t, t)
 
 
+def _strip_zip4(text: str) -> str:
+    """Normalize ZIP+4 to 5-digit ZIP for comparison."""
+    return _ZIP4_RE.sub(r"\1", text)
+
+
 def _normalize_address(raw: str) -> str:
     """Return a normalized, lowercase address string.
 
     Parses with usaddress; falls back to simple whitespace-collapse on failure.
-    Street-type tokens are expanded to their full form for consistent comparison.
+    Street-type tokens are expanded to their full form. ZIP+4 is reduced to ZIP5.
     """
+    raw = _strip_zip4(raw)
     try:
         tagged, _ = usaddress.tag(raw)
     except usaddress.RepeatedLabelError:
-        # Fall back to raw normalization
         return _WHITESPACE_RE.sub(" ", raw.lower().strip())
 
     parts: list[str] = []
@@ -74,7 +79,8 @@ def detect_addresses(
     """Detect address variants in text layers using usaddress + rapidfuzz.
 
     Normalizes each profile address and each text span, then computes
-    token_set_ratio. A match is emitted when score >= match_threshold.
+    partial_ratio for substring/variant matching. Case-insensitive.
+    Handles ZIP+4, abbreviated street types, and no-comma variants.
 
     Args:
         layers: Text spans extracted from a PDF page.
@@ -95,7 +101,6 @@ def detect_addresses(
             continue
         normalized_text = _normalize_address(layer.text)
         for norm_addr in normalized_addresses:
-            # Use partial_ratio: address in text may be a substring of the full address
             score = fuzz.partial_ratio(norm_addr, normalized_text)
             if score >= threshold:
                 detections.append(

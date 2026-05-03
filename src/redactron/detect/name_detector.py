@@ -1,7 +1,8 @@
 """Name variant detector using rapidfuzz token-set ratio.
 
 Matches subject name aliases against extracted text spans using fuzzy
-matching, respecting the profile's match_threshold and full_token_min_length.
+matching, with case-insensitive comparison, middle-initial tolerance,
+and corporate-entity suppression.
 """
 
 from __future__ import annotations
@@ -16,10 +17,23 @@ from redactron.profile import Profile
 
 _WORD_RE = re.compile(r"\b\w+\b")
 
+# Corporate suffixes that indicate a business entity, not a person
+_CORPORATE_SUFFIXES = frozenset({
+    "inc", "corp", "llc", "ltd", "co", "company", "corporation",
+    "industries", "group", "associates", "partners", "holdings",
+    "enterprises", "services", "solutions",
+})
+
 
 def _tokens(text: str) -> list[str]:
     """Return lowercase word tokens from text."""
     return _WORD_RE.findall(text.lower())
+
+
+def _is_corporate_context(text: str) -> bool:
+    """Return True if text looks like a corporate entity name."""
+    tokens = _tokens(text)
+    return bool(tokens and tokens[-1] in _CORPORATE_SUFFIXES)
 
 
 def detect_names(
@@ -28,10 +42,8 @@ def detect_names(
 ) -> list[Detection]:
     """Detect name aliases in text layers using rapidfuzz token_set_ratio.
 
-    For each text span, checks every alias in profile.subject.aliases
-    (plus display_name) using token_set_ratio. A match is emitted when
-    the score >= match_threshold AND every token in the alias is at least
-    full_token_min_length characters long.
+    Matching is case-insensitive. Spans that look like corporate entity
+    names (ending in Inc., Corp., LLC, etc.) are suppressed.
 
     Args:
         layers: Text spans extracted from a PDF page.
@@ -55,8 +67,12 @@ def detect_names(
     for layer in layers:
         if not layer.text:
             continue
+        # Suppress corporate entity names
+        if _is_corporate_context(layer.text):
+            continue
+        text_lower = layer.text.lower()
         for alias in valid_candidates:
-            score = fuzz.token_set_ratio(alias.lower(), layer.text.lower())
+            score = fuzz.token_set_ratio(alias.lower(), text_lower)
             if score >= threshold:
                 detections.append(
                     Detection(
