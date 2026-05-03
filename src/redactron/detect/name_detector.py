@@ -72,7 +72,16 @@ def detect_names(
             continue
         text_lower = layer.text.lower()
         for alias in valid_candidates:
-            score = fuzz.token_set_ratio(alias.lower(), text_lower)
+            # Use max(token_set_ratio, partial_ratio) to catch names embedded
+            # in longer sentences ("Prepared by Alice Sample.").
+            # Require span to be at least half the alias length to prevent
+            # single-char spans from matching via partial_ratio substring.
+            if len(text_lower.strip()) < max(len(alias) * 0.5, 3):
+                continue
+            score = max(
+                fuzz.token_set_ratio(alias.lower(), text_lower),
+                fuzz.partial_ratio(alias.lower(), text_lower),
+            )
             if score >= threshold:
                 detections.append(
                     Detection(

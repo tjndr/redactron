@@ -187,7 +187,24 @@ Understanding how each field type is matched prevents surprises:
 | Account numbers | Exact digit match (separators stripped) | Fuzzy on digits causes catastrophic over-redaction |
 | Custom patterns | Regex with `re.finditer` | Exact by definition |
 
-**Numeric tokens are NEVER fuzzy-matched in isolation.** This is enforced by:
+### Exhaustive detection
+
+Every detector scans **all occurrences** on every page. If an account number appears in the header, body table, and footer of a PDF, all three are detected and redacted. There is no deduplication by text value — each bbox span is a separate redaction target.
+
+### Safety-net multi-pass
+
+After applying redactions, the pipeline re-extracts the redacted PDF and re-runs all detectors (up to 3 passes total). If survivors are found in pass 2 or 3, they are redacted immediately and a warning is logged:
+
+```
+Safety pass 2: 3 SURVIVORS detected — first-pass missed these. Redacting.
+WARNING: First-pass detection missed 3 spans that the safety net caught.
+```
+
+This is a **runtime correctness mechanism** — it guarantees the output is clean even if a detector has a gap. The M3 verifier (BLD-13) is a separate **audit mechanism** that produces an external report for user trust and compliance. Defense in depth: safety net catches runtime gaps; verifier provides audit evidence.
+
+If redaction does not converge after 3 passes (pathological input), the pipeline raises `RedactionError` rather than silently producing incomplete output.
+
+
 
 1. `_is_address_candidate()` — rejects any span that is purely numeric or shorter than 5 characters before any fuzzy comparison is attempted
 2. An assertion in the matching loop that fires if a numeric-normalized form reaches the fuzzy step
