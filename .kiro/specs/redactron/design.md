@@ -118,19 +118,114 @@ redactron/
 │   ├── verify/verifier.py
 │   ├── audit/log.py
 │   ├── report/markdown.py
+│   ├── vault/
+│   │   ├── __init__.py
+│   │   ├── store.py      # VaultStore, VaultEntry, open/seal
+│   │   ├── keychain.py   # KeychainBackend ABC + platform backends
+│   │   └── migrate.py    # migrate_profile(), secure_wipe()
 │   └── web/app.py  (M5 only)
 ├── tests/
 │   ├── fixtures/  (10 synthetic PDFs)
 │   ├── test_detect.py
 │   ├── test_redact.py
 │   ├── test_verify.py
+│   ├── test_vault.py
+│   ├── test_keychain.py
+│   ├── test_migration.py
 │   └── test_e2e.py
-├── docs/{PROFILE,PRIVACY}.md
+├── docs/
+│   ├── PROFILE.md
+│   ├── PRIVACY.md
+│   └── SECURITY.md       # M3.5.6
 ├── pyproject.toml
 ├── LICENSE  (AGPL-3.0)
 ├── README.md
 └── CHANGELOG.md
 ```
+
+## Vault and keychain integration
+
+### File format
+
+| File | Path | Description |
+|------|------|-------------|
+| `vault.enc` | `~/.redactron/vault.enc` | AES-256-GCM ciphertext of all client profiles |
+| `vault.salt` | `~/.redactron/vault.salt` | Per-vault random salt (plaintext, 32 bytes hex) |
+
+The vault file is a single encrypted blob. The encryption key is derived from the master
+secret stored in the OS keychain using Argon2id (or HKDF). The salt is stored separately
+so the vault file itself contains no key material.
+
+### Key management abstraction
+
+```python
+from abc import ABC, abstractmethod
+
+class KeychainBackend(ABC):
+    @abstractmethod
+    def get_master_key(self) -> bytes: ...
+
+    @abstractmethod
+    def set_master_key(self, key: bytes) -> None: ...
+```
+
+`get_keychain_backend() → KeychainBackend` auto-detects platform via `sys.platform`.
+
+### OS keychain backends
+
+| Platform | Backend | Status |
+|----------|---------|--------|
+| macOS | `MacOSKeychainBackend` — `keyring` + `kSecAccessControlBiometryAny` | v1 |
+| Linux | `LinuxKeychainBackend` — `libsecret` via `keyring` | v1.1 (stub raises `NotImplementedError`) |
+| Windows | `WindowsKeychainBackend` — DPAPI via `keyring` | v1.1 (stub raises `NotImplementedError`) |
+
+### Touch ID flow on macOS
+
+Every call to `get_master_key()` triggers a Touch ID prompt via
+`kSecAccessControlBiometryAny`. There is no in-process caching of the master key.
+The sequence for `redactron run doc.pdf --client acme`:
+
+```
+CLI → VaultStore.open(backend)
+        → MacOSKeychainBackend.get_master_key()   ← Touch ID prompt
+        → derive_key(master_key, salt)
+        → AES-256-GCM decrypt vault.enc
+        → extract client_id="acme" row
+        → deserialize Profile
+      → existing extract → detect → redact → verify pipeline
+```
+
+### Profile entry schema
+
+```python
+@dataclass
+class VaultEntry:
+    client_id: str          # slug, primary key
+    display_name: str
+    created_at: datetime
+    updated_at: datetime
+    profile_json: str       # full Profile struct serialized as JSON
+    notes: str              # encrypted alongside profile_json
+```
+
+### Backwards compatibility
+
+Legacy `~/.redactron/profile.yaml` continues to work in v1 with a deprecation warning:
+
+```
+DeprecationWarning: profile.yaml is deprecated; migrate with 'redactron profile import'
+```
+
+When `--client` is not given and no vault exists, the legacy profile is loaded. When a
+vault exists, `--client default` is used. Migration path: `redactron profile import
+old.yaml --client default`.
+
+### New typed exceptions
+
+- `VaultError` — any crypto failure (wrong key, corrupt ciphertext, missing salt)
+- `KeychainError` — OS keychain unavailable or biometric auth failed
+
+Both live in `redactron.errors`.
 
 ## Performance Targets
 
