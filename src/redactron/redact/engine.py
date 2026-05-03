@@ -92,7 +92,7 @@ def redact(doc: fitz.Document, detections: list[Detection]) -> fitz.Document:
 
                 page.add_redact_annot(rect, fill=(0, 0, 0))
 
-            page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+            page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE, graphics=0)
 
         return out
     except RedactionError:
