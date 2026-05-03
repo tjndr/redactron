@@ -192,6 +192,16 @@ For every subsequent task:
         b. After picking up the next task, trust GitHub's auto-merge + the on-pr-merge hook to handle Linear state. Only spot-check at the end of each milestone.
   - For exception tasks: STOP and wait for my approval before continuing.
 
+  STRICT SERIALIZATION (mandatory):
+  Before opening any new PR, run:
+      gh pr list --state open --json number,mergeStateStatus
+  If ANY PR is in "BLOCKED", "BEHIND", "DIRTY", "UNSTABLE", or "PENDING"
+  state, do NOT open a new PR. Poll every 30 seconds until all open PRs
+  are MERGED or in CLEAN state with auto-merge enabled and CI complete.
+  Only then proceed with the next task. Cherry-picking onto pending
+  branches is forbidden — it produces conflicts that cost more to
+  resolve than the time saved by parallel work.
+
 Use Claude Sonnet 4.6 by default. Switch to Claude Haiku 4.5 only when I prefix
 a message with /model haiku.
 
