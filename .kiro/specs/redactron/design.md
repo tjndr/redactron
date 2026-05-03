@@ -227,6 +227,31 @@ old.yaml --client default`.
 
 Both live in `redactron.errors`.
 
+### BLD-29 Vault file format (implemented)
+
+Binary layout of `~/.redactron/vault.enc`:
+
+```
+Offset  Size  Field
+0       8     magic: b"REDV1\x00\x00\x00"  (version tag)
+8       12    nonce: os.urandom(12) per encryption
+20      16    tag:   AES-256-GCM authentication tag
+36      N     ciphertext: AES-256-GCM encrypted JSON payload
+Total = 36 + N bytes
+```
+
+Crypto choices:
+- **AES-256-GCM** (not CBC/ECB): authenticated encryption — any tampering raises `InvalidTag`
+- **96-bit nonce** per encryption: GCM standard; nonce reuse with same key is catastrophic, so a fresh `os.urandom(12)` is generated for every `save()` call
+- **`secrets.token_bytes(32)`** for master key: CSPRNG, never written to disk
+- **Argon2id** (t=2, m=64MB, p=1) available for KDF if key rotation needed; per-vault salt at `vault.salt`
+
+`KeychainBackend` Protocol (2 methods):
+- `get_or_create_master_key(vault_id: str) -> bytes`
+- `delete_master_key(vault_id: str) -> None`
+
+Atomic write: `vault.enc.tmp` → fsync → rename. File permissions enforced at 0600 on every save; `SecurityError` raised if looser on load.
+
 ## Performance Targets
 
 | Scenario | Target |
