@@ -81,6 +81,7 @@ def _apply_redactions(doc: fitz.Document, detections: list[Detection]) -> None:
         for det in page_dets:
             page.add_redact_annot(fitz.Rect(det.bbox), fill=(0, 0, 0))
         page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE, graphics=0)
+        page.clean_contents()  # merge streams so redaction renders correctly in all viewers
 
 
 def run_pipeline(
