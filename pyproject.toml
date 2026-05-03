@@ -67,3 +67,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=src/redactron --cov-report=term-missing"
+markers = [
+    "macos_real_hardware: requires real macOS hardware with keychain entitlements (not run in CI)",
+    "macos: macOS-only tests",
+]
