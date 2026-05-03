@@ -79,6 +79,16 @@ def run(
     from redactron.profile import load_profile
 
     profile_path = Path(profile) if profile else default_profile_path()
+    vault_path = _default_vault_path()
+
+    # Backwards-compat: if vault exists and no explicit --profile, warn
+    if not profile and vault_path.exists() and profile_path.exists():
+        typer.echo(
+            "⚠️  Deprecation: both profile.yaml and vault.enc found. "
+            "Using profile.yaml. Migrate with: redactron profile import profile.yaml",
+            err=True,
+        )
+
     try:
         loaded_profile = load_profile(profile_path)
     except ProfileValidationError as exc:
@@ -695,6 +705,35 @@ def profile_rename(
     try:
         store.rename_profile(old_id, new_id)
         typer.echo(f"Profile '{old_id}' renamed to '{new_id}'.")
+    except Exception as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+@profile_app.command("import")
+def profile_import(
+    yaml_path: Path = typer.Argument(..., help="Legacy profile.yaml to import."),
+    client: str = typer.Option("", "--client", "-c", help="Client ID (default: filename stem)."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Validate without writing or wiping."),
+) -> None:
+    """Import a legacy profile.yaml into the vault and secure-wipe the source."""
+    import yaml
+
+    from redactron.vault.migrate import migrate_profile
+
+    client_id = client or yaml_path.stem
+    store = _get_vault_store()
+
+    if dry_run:
+        from redactron.vault.migrate import migrate_profile as _mp
+        profile_dict = _mp(yaml_path, client_id, store, dry_run=True)
+        typer.echo(f"[dry-run] Would import '{yaml_path}' as client '{client_id}':")
+        typer.echo(yaml.dump(profile_dict, default_flow_style=False))
+        return
+
+    try:
+        migrate_profile(yaml_path, client_id, store)
+        typer.echo(f"✅ Imported '{yaml_path}' as client '{client_id}'. Source file wiped.")
     except Exception as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
