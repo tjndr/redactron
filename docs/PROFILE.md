@@ -272,7 +272,7 @@ Every detector scans **all occurrences** on every page. If an account number app
 
 ### Overview
 
-redactron v1 stores all client profiles in an AES-256-GCM encrypted vault at `~/.redactron/vault.enc`. The master key lives exclusively in the macOS Keychain, protected by Touch ID.
+redactron v1 stores all client profiles in an AES-256-GCM encrypted vault at `~/.redactron/vault.enc`. The master key lives in the macOS login keychain, protected by Touch ID via the LocalAuthentication framework.
 
 ### Vault init
 
@@ -280,7 +280,7 @@ redactron v1 stores all client profiles in an AES-256-GCM encrypted vault at `~/
 redactron vault init
 ```
 
-Creates `~/.redactron/vault.enc` and generates the master key in the macOS Keychain. Touch ID is required on every vault access.
+Creates `~/.redactron/vault.enc` and generates the master key in the macOS login keychain. Touch ID is required on every vault access.
 
 ### Adding profiles
 
@@ -333,8 +333,9 @@ redactron run invoice.pdf --client bob
 ### Touch ID UX
 
 - Touch ID prompts once per CLI invocation (not once per profile lookup)
-- After 5 failed Touch ID attempts, macOS falls back to your login password
-- Cancelling the prompt shows: "Touch ID prompt was cancelled. Cannot unlock the vault."
+- If Touch ID is unavailable, macOS falls back to your login password
+- Cancelling the prompt shows: "Touch ID authentication failed or was cancelled. Cannot unlock the vault."
+- Works without an Apple Developer account or code signing — uses LocalAuthentication framework
 - Running in CI/headless: use `--profile` flag with a legacy YAML instead
 
 ### Backwards compatibility
