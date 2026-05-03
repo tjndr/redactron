@@ -659,7 +659,7 @@ redactron report <run_id>                            # re-render markdown report
 redactron dry-run <path> [--client, --json]         # preview without writing files
 redactron profile show [<id>] [--reveal] [--client]
 redactron profile edit [<id>] [--client]
-redactron profile add [--client <id>] [--from <yaml>]
+redactron profile add --client <id> [--name <name>] [--from <yaml>]
 redactron profile list
 redactron profile delete <id>
 redactron profile rename <old> <new>
