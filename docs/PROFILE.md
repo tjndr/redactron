@@ -265,3 +265,79 @@ Every detector scans **all occurrences** on every page. If an account number app
 - Structured house-number comparison (exact match on number, fuzzy on street name)
 - Phone and email detectors wired into profile
 - SSN pattern matching
+
+---
+
+## Encrypted vault (M3.5)
+
+### Overview
+
+redactron v1 stores all client profiles in an AES-256-GCM encrypted vault at `~/.redactron/vault.enc`. The master key lives exclusively in the macOS Keychain, protected by Touch ID.
+
+### Vault init
+
+```bash
+redactron vault init
+```
+
+Creates `~/.redactron/vault.enc` and generates the master key in the macOS Keychain. Touch ID is required on every vault access.
+
+### Adding profiles
+
+```bash
+# Interactive
+redactron profile add --client acme --name "Acme Corp"
+
+# From existing YAML
+redactron profile add --client acme --from profile.yaml
+```
+
+### Listing profiles
+
+```bash
+redactron profile list
+```
+
+Shows client IDs and display names only — no PII.
+
+### Showing a profile
+
+```bash
+# Masked (default)
+redactron profile show acme
+
+# Unmasked — requires TTY + confirmation + Touch ID
+redactron profile show acme --reveal
+```
+
+### Migrating from profile.yaml
+
+```bash
+redactron profile import ~/.redactron/profile.yaml --client default
+```
+
+Validates the YAML, imports it into the vault, and **secure-wipes** the source file (3-pass random overwrite + unlink). Use `--dry-run` to preview without writing.
+
+### Multi-client workflow
+
+```bash
+# Add two clients
+redactron profile add --client alice --from alice.yaml
+redactron profile add --client bob --from bob.yaml
+
+# Run with a specific client
+redactron run statement.pdf --client alice
+redactron run invoice.pdf --client bob
+```
+
+### Touch ID UX
+
+- Touch ID prompts once per CLI invocation (not once per profile lookup)
+- After 5 failed Touch ID attempts, macOS falls back to your login password
+- Cancelling the prompt shows: "Touch ID prompt was cancelled. Cannot unlock the vault."
+- Running in CI/headless: use `--profile` flag with a legacy YAML instead
+
+### Backwards compatibility
+
+If `~/.redactron/profile.yaml` exists alongside `vault.enc`, redactron uses `profile.yaml` and emits a deprecation warning. Migrate with `redactron profile import`.
+
