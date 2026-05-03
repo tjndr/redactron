@@ -1,4 +1,5 @@
-We are building `redactron`, a local-only CLI for batch PII redaction in PDFs.
+We are building `redactron`, a local-only CLI for batch PII redaction in PDFs
+with verification, audit logging, and encrypted multi-client profile vault.
 
 Read these files first, in order:
   1. .kiro/steering/product.md
@@ -11,269 +12,512 @@ Verify both are reachable. If Linear OAuth needs browser auth, prompt me.
 
 Your first job is to bootstrap the project end-to-end.
 
-0. RESOLVE LINEAR TEAM (do this first, before any Linear creation):
-   - Call linear.list_teams() and show me the result.
-   - If exactly ONE team: name it explicitly, ask "Use team <Name> (identifier <ID>)?"
-     and wait for "yes".
-   - If MULTIPLE teams: list each with name, identifier, member count; ask which to use.
-   - If ZERO teams: stop and ask me to create a team via Linear UI, then re-run.
-   - Once resolved, store the team identifier (e.g. RED). All Linear ops scope to it.
-     Issues will auto-generate as <ID>-1 ... <ID>-28 from this team's prefix.
+============================================================
+0. RESOLVE LINEAR TEAM (do this first, before any Linear creation)
+============================================================
+- Call linear.list_teams() and show me the result.
+- If exactly ONE team: name it explicitly, ask "Use team <Name> (identifier <ID>)?"
+  and wait for "yes".
+- If MULTIPLE teams: list each with name, identifier, member count; ask which to use.
+- If ZERO teams: stop and ask me to create a team via Linear UI, then re-run.
+- Once resolved, store the team identifier (e.g. BLD). All Linear ops scope to it.
+  Issues will auto-generate as <ID>-1 ... <ID>-34 from this team's prefix.
 
-1. Create a Linear project named "Redactron" under the resolved team if it doesn't
-   already exist. If it does, use it as-is and skip to step 2.
+============================================================
+1. CREATE LINEAR PROJECT
+============================================================
+Create a Linear project named "Redactron" under the resolved team if it doesn't
+already exist. If it does, use it as-is and skip to step 2.
 
-2. Create 5 milestones (skip any that already exist):
-   - M1 Core engine             (target +4 days)
-   - M2 Profile + variants      (target +7 days)
-   - M3 Verification + audit    (target +10 days)
-   - M4 Polish + launch         (target +14 days)
-   - M5 Web UI (v1.5)           (target +21 days, status: Backlog)
+============================================================
+2. CREATE 6 MILESTONES (skip any that already exist)
+============================================================
+- M1   Core engine                              (target +4 days)
+- M2   Profile + variants                       (target +7 days)
+- M3   Verification + audit                     (target +10 days)
+- M3.5 Encrypted multi-client profile vault     (target +13 days, security)
+- M4   Polish + launch                          (target +17 days)
+- M5   Web UI (v1.5)                            (target +24 days, status: Backlog)
 
-3. Create 28 Linear issues from the task list below, assign each to its milestone,
-   and add the matching phase label (phase-1..phase-5). M1–M4 issues (22 total)
-   go into Cycle 1 in sequential order. M5 issues (6 total) stay in Backlog state
-   until v1 ships. Skip any issue whose title already exists (idempotent).
+============================================================
+3. CREATE 34 LINEAR ISSUES
+============================================================
+From the task list at the bottom of this prompt. Assign each to its milestone
+and add the matching phase label (phase-1..phase-5, plus phase-3.5).
+- M1–M3 issues (18) and M4 issues (4) go into Cycle 1 in sequential order.
+- M3.5 issues (6) stay in Backlog state until M3 fully merges; bring them into
+  the cycle when M3 ships.
+- M5 issues (6) stay in Backlog state until v1 ships.
+Skip any issue whose title already exists (idempotent).
 
-4. VERIFY (do not recreate) the GitHub repo tjndr/redactron:
-   - Call github.get_repo("tjndr/redactron").
-   - If it does NOT exist: STOP and ask me before creating. Do not auto-create.
-   - If it exists:
-       a. Inspect contents. If any files exist, tell me what's there and ask
-          whether to (i) preserve and add ours alongside, or (ii) overwrite.
-       b. If empty: push initial commit with AGPL-3.0 LICENSE, Python .gitignore,
-          README stub, and the .kiro/ + spec files.
-       c. Configure main branch protection: require PR before merge, require
-          status checks to pass, dismiss stale reviews on push.
-       d. Confirm the repo stays PRIVATE.
+============================================================
+4. VERIFY (do not recreate) THE GITHUB REPO tjndr/redactron
+============================================================
+- Call github.get_repo("tjndr/redactron").
+- If it does NOT exist: STOP and ask me before creating. Do not auto-create.
+- If it exists:
+    a. Inspect contents. If any files exist, tell me what's there and ask
+       whether to (i) preserve and add ours alongside, or (ii) overwrite.
+    b. If empty: push initial commit with AGPL-3.0 LICENSE, Python .gitignore,
+       README stub, and the .kiro/ + spec files.
+    c. Configure main branch protection: require PR before merge, require
+       status checks to pass, dismiss stale reviews on push, allow auto-merge,
+       auto-delete head branches.
+    d. Confirm the repo stays PRIVATE.
 
-5. Generate the spec files in .kiro/specs/redactron/:
-   - requirements.md  (user stories from product.md, acceptance per milestone)
-   - design.md        (architecture, data flow, module boundaries)
-   - tasks.md         (28 issues with implementation notes, mapping each to its Linear ID)
+============================================================
+5. GENERATE SPEC FILES in .kiro/specs/redactron/
+============================================================
+- requirements.md  (user stories from product.md, acceptance per milestone)
+- design.md        (architecture, data flow, module boundaries)
+- tasks.md         (34 issues with implementation notes, mapping each to its Linear ID)
 
-5a. Set the Linear project description to:
-    "Redactron: a local-only CLI that batch-redacts PII from PDFs using a user
-     profile, with verification and audit logging. Python + PyMuPDF + Presidio.
-     AGPL-3.0. v1 ships in 14 focused days; v1.5 adds a Gradio web UI."
+============================================================
+5a. SET LINEAR PROJECT DESCRIPTION
+============================================================
+"Redactron: a local-only CLI that batch-redacts PII from PDFs using a user
+profile, with verification, audit logging, and encrypted multi-client vault.
+Python + PyMuPDF + Presidio. AGPL-3.0. v1 ships in 17 days; v1.5 adds Gradio
+web UI."
 
-5b. Create FOUR Linear project documents in the Redactron project:
-    - "Architecture" — repo layout, module boundaries, mermaid data-flow diagram:
-        PDF → extract → detect → redact → verify → audit log + report
-    - "Data model" — profile.yaml schema, audit DB schema, CLI surface
-    - "Conventions and risks" — full conventions.md content + risks table:
-        | Risk | Mitigation |
-        | PyMuPDF AGPL scares some users | Document in PRIVACY.md; pikepdf alt path in v2 |
-        | Presidio NER misses non-English names | Profile aliases override; document |
-        | Over-redaction false positives | full_token_min_length: 2; dry-run; threshold |
-        | Mid-string partial redaction bbox math wrong | get_text("rawdict") char positions |
-        | OCR accuracy on poor scans | Min DPI 300; flag low-confidence |
-        | Format drift in PyMuPDF/Presidio | Pin exact versions; renovate weekly |
-        | Kiro hits credit budget | Haiku for boilerplate; Sonnet for logic-heavy |
-    - "Credit Budget" — use this template:
+============================================================
+5b. CREATE FOUR LINEAR PROJECT DOCUMENTS
+============================================================
+1. "Architecture" — repo layout, module boundaries, mermaid data-flow:
+     PDF → extract → detect → redact → verify → audit log + report
+     Profile load → keychain auth → decrypt vault → extract client_id row
+2. "Data model" — profile.yaml schema, audit DB schema, credits DB schema,
+   vault.enc schema, CLI surface
+3. "Conventions and risks" — full conventions.md content + risks table:
+     | Risk | Mitigation |
+     | PyMuPDF AGPL scares some users | Document in PRIVACY.md; pikepdf alt path in v2 |
+     | Presidio NER misses non-English names | Profile aliases override; document |
+     | Over-redaction false positives | use_presidio: false default; threshold; dry-run |
+     | Numeric over-matching | Numeric tokens never fuzzy-matched; warn+skip |
+     | Mid-string partial bbox math wrong | get_text("rawdict"); per-line bbox lists |
+     | OCR accuracy on poor scans | Min DPI 300; flag low-confidence |
+     | Format drift in PyMuPDF/Presidio | Pin exact versions; renovate weekly |
+     | Profile leak / multi-client PII | Encrypted vault (M3.5) + Tier-1 hygiene |
+     | Cherry-pick conflicts | Strict PR serialization (per-task workflow) |
+     | Kiro hits credit budget | Haiku for boilerplate; Sonnet for logic-heavy |
+4. "Credit Budget" template:
 
-        # Redactron — Credit Budget
+   # Redactron — Credit Budget
 
-        ## Allocation
-        | Milestone               | Planned | Actual | Status      |
-        | M1 Core engine          | 280     | TBD    | not started |
-        | M2 Profile + variants   | 310     | TBD    | not started |
-        | M3 Verification + audit | 250     | TBD    | not started |
-        | M4 Polish + launch      | 120     | TBD    | not started |
-        | M5 Web UI (v1.5)        | 300     | TBD    | not started |
-        | Buffer                  | 40      | n/a    | n/a         |
-        | **Total**               | **1300**| TBD    |             |
+   ## Allocation
+   | Milestone               | Planned | Actual | Status      |
+   | M1 Core engine          | 280     | TBD    | not started |
+   | M2 Profile + variants   | 310     | TBD    | not started |
+   | M3 Verification + audit | 250     | TBD    | not started |
+   | M3.5 Encrypted vault    | 350     | TBD    | not started |
+   | M4 Polish + launch      | 120     | TBD    | not started |
+   | M5 Web UI (v1.5)        | 300     | TBD    | not started |
+   | Buffer                  | 40      | n/a    | n/a         |
+   | **Total v1**            | **1350**| TBD    |             |
+   | **Total v1+v1.5**       | **1650**| TBD    |             |
 
-        ## Running total
-        Used: 0
-        Remaining: 1000 (v1) / 1300 (v1+v1.5)
-        Last updated: <bootstrap timestamp>
+   ## Running total
+   Used: 0
+   Remaining v1: 1350 / Remaining v1+v1.5: 1650
+   Last updated: <bootstrap timestamp>
 
-        ## Burn-rate alerts
-        - WARNING at 80% of v1 (800 credits)
-        - CRITICAL at 95% of v1 (950 credits)
+   ## Burn-rate alerts
+   - WARNING at 80% of v1 (1080 credits)
+   - CRITICAL at 95% of v1 (1283 credits)
 
-        ## Per-issue actuals (sorted by cost desc)
-        (Empty until first task completes.)
+   ## Per-issue actuals (sorted by cost desc)
+   (Empty until first task completes.)
 
-5c. For each milestone, set its description to the matching acceptance criteria:
-    - M1: redactron run <single-file.pdf> redacts a known PII string and produces output;
-          output passes verification; CI green on Linux + macOS.
-    - M2: profile YAML loads/validates/drives detection; "100 Phillip Street" matches
-          "100 Philip St" via fuzzy; 1234-5678-9012-3456 redacts to XXXX-XXXX-XXXX-3456;
-          folder of 10 mixed PDFs processes in one command.
-    - M3: every run produces verification report (markdown + JSON); audit log queryable
-          by redactron log --subject <id>; dry-run shows what would be redacted.
-    - M4: image-only PDF gets OCR'd and redacted; 10 synthetic test PDFs all pass; README
-          quickstart + demo GIF; pip install redactron works from PyPI; launch post drafted.
-    - M5: redactron ui opens browser with working web UI; drag-drop folder, redact in real time,
-          download zip; visual diff overlay per page; profile editable via UI; audit log in UI.
+============================================================
+5c. SET EACH MILESTONE DESCRIPTION TO ITS ACCEPTANCE CRITERIA
+============================================================
+M1 done when: redactron run <single-file.pdf> redacts a known PII string and
+   produces output; output passes verification; CI green on Linux + macOS.
 
-5d. For each issue, populate the description with this template:
+M2 done when: profile YAML loads/validates/drives detection; "100 Phillip
+   Street" matches "100 Philip St" via fuzzy; 1234-5678-9012-3456 redacts to
+   XXXX-XXXX-XXXX-3456; folder of 10 mixed PDFs processes in one command;
+   numeric tokens never fuzzy-matched; multi-line addresses bridge per-line
+   bboxes; column-aware extraction; figure text skipped by default.
 
-       ## Goal
-       <one sentence>
+M3 done when: every run produces verification report (markdown + JSON) by
+   default; audit log queryable by `redactron log --subject <id>`; dry-run
+   shows what would be redacted; safety-net second pass catches survivors;
+   reports include subject info, detections, verification status, timing.
 
-       ## Implementation notes
-       <bullets from the task list below>
+M3.5 done when: redactron vault init creates encrypted vault + master key in
+   keychain; profile add/list/show/edit/delete/rename work; profile show
+   masks by default, --reveal requires Touch ID + TTY; profile import
+   migrates legacy yaml + secure-wipes source; redactron run --client <id>
+   loads correct profile via Touch ID; macOS Touch ID prompts on every vault
+   access; vault file is opaque ciphertext; legacy profile.yaml works with
+   deprecation warning; zero plaintext PII in logs/swap/temp; all detection
+   tests pass against vault-loaded profiles; Touch ID overhead < 2s.
 
-       ## Files touched
-       <paths from the repo layout below>
+M4 done when: image-only PDF gets OCR'd and redacted with NoTextLayerError
+   replaced by automatic OCR; 10 synthetic test PDFs all pass; README +
+   PROFILE.md + PRIVACY.md + SECURITY.md + demo GIF; pip install redactron
+   works from PyPI; launch post drafted (don't submit yet).
 
-       ## Acceptance criteria
-       - [ ] Unit tests pass
-       - [ ] mypy strict passes for affected modules
-       - [ ] <task-specific criteria>
+M5 done when: redactron ui opens browser with working web UI; drag-drop
+   folder, redact in real time, download zip; visual diff overlay per page;
+   profile editable via UI; audit log in UI.
 
-       ## Model preference
-       sonnet | haiku  (Sonnet for tricky logic; Haiku for boilerplate/docs/tests)
+============================================================
+5d. ISSUE DESCRIPTION TEMPLATE
+============================================================
+For each issue:
 
-       ## Linked spec
-       .kiro/specs/redactron/tasks.md#<anchor>
+   ## Goal
+   <one sentence>
 
-5e. Add labels to each issue:
-    - phase-1, phase-2, phase-3, phase-4, phase-5 (one per issue, matching milestone)
-    - type: feat | infra | docs | test (one per issue)
-    - model: sonnet | haiku (one per issue)
+   ## Implementation notes
+   <bullets from the task list>
 
-5f. Idempotency: before creating any Linear entity, check if one with the same
-    name/identifier exists. If yes, update in place. If no, create. Never duplicate.
-    Report counts: "existing reused: N, newly created: M".
+   ## Files touched
+   <paths from the repo layout>
 
-5g. Create four custom views in the Redactron project:
-    - "By milestone" — grouped by milestone, sorted by status
-    - "Current cycle" — what's being worked on this week
-    - "Blocked / needs review" — anything Blocked or PR-pending
-    - "By model" — grouped by sonnet/haiku label (for credit budget tracking)
+   ## Acceptance criteria
+   - [ ] Unit tests pass (95%+ coverage on touched modules)
+   - [ ] mypy strict passes for affected modules
+   - [ ] ruff clean
+   - [ ] Integration test exercises CLI-to-output pipeline (per milestone)
+   - [ ] <task-specific criteria>
 
-5h. CREDIT USAGE TRACKING (mandatory after every PR opens):
-    Run scripts/log-credits.sh immediately after opening each PR:
-        bash scripts/log-credits.sh <issue-id> <delta> <duration_seconds> [model] [pr-url]
-    Do NOT parse chat output or use /usage commands. The script reads
-    .redactron/credits.db for the running total, inserts the new row,
-    prints the Linear comment text, and fires a credit alert if >= 800.
-    Estimate delta from the task complexity if an exact count is unavailable.
+   ## Model preference
+   sonnet | haiku  (Sonnet for tricky logic; Haiku for boilerplate/docs/tests)
 
-6. Run `uv init` and create pyproject.toml with the locked stack from tech.md
-   (Python 3.11, PyMuPDF, presidio-analyzer, presidio-anonymizer, rapidfuzz,
-   usaddress, pytesseract, typer, pydantic v2; pytest/ruff/mypy as dev deps;
-   gradio behind an [ui] optional extra for v1.5).
+   ## Linked spec
+   .kiro/specs/redactron/tasks.md#<anchor>
 
-7. Push the initial commit to GitHub on main.
+============================================================
+5e. ADD LABELS TO EACH ISSUE
+============================================================
+- phase-1 / phase-2 / phase-3 / phase-3.5 / phase-4 / phase-5 (one, matching milestone)
+- type: feat | infra | docs | test | fix (one per issue)
+- model: sonnet | haiku (one per issue)
+- security: critical (only on M3.5 issues that touch crypto, keychain, or vault)
 
-8. Stop and show me a status report:
-   - Linear: project URL, all 5 milestone URLs, total issue count (28), URLs for
-     the 4 project documents (Architecture, Data model, Conventions and risks,
-     Credit Budget)
-   - GitHub: repo URL, initial commit SHA, branch protection state
-   - Local: tree of created files including .redactron/credits.db
-   - Next task suggested with its Linear ID and branch name
+============================================================
+5f. IDEMPOTENCY (so re-running this kickoff is safe)
+============================================================
+Before creating any Linear entity (project, milestone, issue, document, label,
+view), check if one with the same name/identifier exists. If yes, update in
+place. If no, create. Never duplicate. Report counts:
+  "existing reused: N, newly created: M"
 
-Do NOT start implementation tasks (M1.3 onward) until I explicitly confirm.
+============================================================
+5g. CREATE FOUR CUSTOM VIEWS IN THE REDACTRON PROJECT
+============================================================
+1. "By milestone" — grouped by milestone, sorted by status
+2. "Current cycle" — what's being worked on this week
+3. "Blocked / needs review" — anything Blocked or PR-pending
+4. "By model" — grouped by sonnet/haiku label (for credit budget tracking)
 
-For every subsequent task:
-  - Move the Linear issue to "In Progress"
-  - Create branch <phase>/<linear-id>-short-desc (e.g. m2/bld-7-profile-schema)
-  - Implement, write tests, run: uv run pytest && uv run ruff check && uv run mypy src/
-  - Only when all three pass: commit (conventional commit), push, open PR closing
-    the Linear issue ("Closes BLD-N" in PR body)
-  - Immediately enable auto-merge with squash:
-        gh pr merge --auto --squash --delete-branch
-    GitHub will auto-merge as soon as all 4 CI checks pass and delete the branch.
-  - EXCEPTIONS — do NOT enable auto-merge for these issues; open the PR and stop,
-    wait for my explicit "merge it" approval before continuing to the next task:
-        - BLD-10 (M2.4 partial redaction with last-4 bbox math)
-        - BLD-13 (M3.1 verifier module)
-        - BLD-19 (M4.1 OCR fallback / image-region painting)
-  - Capture your task summary line and execute the credit tracking workflow (5h)
-  - For non-exception tasks:
-        a. Proceed to the next task immediately without waiting for auto-merge
-           to complete. GitHub will handle it asynchronously.
-        b. After picking up the next task, trust GitHub's auto-merge + the on-pr-merge hook to handle Linear state. Only spot-check at the end of each milestone.
-  - For exception tasks: STOP and wait for my approval before continuing.
+============================================================
+5h. CREDIT USAGE TRACKING (mandatory after every completed task)
+============================================================
+On bootstrap, create scripts/log-credits.sh and .redactron/credits.db:
 
-  STRICT SERIALIZATION (mandatory):
-  Before opening any new PR, run:
-      gh pr list --state open --json number,mergeStateStatus
-  If ANY PR is in "BLOCKED", "BEHIND", "DIRTY", "UNSTABLE", or "PENDING"
-  state, do NOT open a new PR. Poll every 30 seconds until all open PRs
-  are MERGED or in CLEAN state with auto-merge enabled and CI complete.
-  Only then proceed with the next task. Cherry-picking onto pending
-  branches is forbidden — it produces conflicts that cost more to
-  resolve than the time saved by parallel work.
+  scripts/log-credits.sh <issue-id> <delta> <duration_seconds> <model> <pr-url>
 
-Use Claude Sonnet 4.6 by default. Switch to Claude Haiku 4.5 only when I prefix
-a message with /model haiku.
+The script:
+  - Reads latest total_after from .redactron/credits.db (default 0)
+  - Computes new_total = previous + delta
+  - INSERTs row into .redactron/credits.db (schema in DATA MODEL below)
+  - Posts Linear comment on the issue:
+      "Task complete. Credits: <delta> | Time: <duration> | Cumulative:
+       <total>/1350 (<percent>%) | Remaining v1: <1350 - total>"
+  - Updates the "Credit Budget" Linear project document
+  - Appends "Credits: <delta> | Time: <duration>" to the GitHub PR description
+  - If new_total >= 1080: posts a credit alert comment
+  - If new_total >= 1283: refuses to log; requires explicit approval
 
-## Spec file maintenance (standing rule)
+DO NOT use /usage or `kiro-cli usage` commands — they don't expose data
+programmatically. Source: parse Kiro's auto-emitted task summary line at the
+end of every completed task, then invoke scripts/log-credits.sh.
 
-Whenever ANY of these happens, IMMEDIATELY update the affected file
-in .kiro/specs/redactron/ in the same PR or as a follow-up `chore:`
-PR with auto-merge enabled. Spec drift from Linear/master plan is a
-bug.
+After every PR is opened (and tests pass + commit+push complete), run
+scripts/log-credits.sh with the parsed values. This is non-negotiable. If
+you skip the script, the task is not complete.
 
-- User pastes or references a master plan change (new milestone,
-  scope change, architecture change)
-- A new Linear issue is created → add tasks.md entry
-- An existing Linear issue is renamed or scope-changed → update
-  tasks.md
-- A milestone is added/removed/reordered → update tasks.md and
-  requirements.md acceptance section
-- Architecture, data model, or repo layout changes → update
-  design.md
-- New module/file paths introduced → update repo layout reference
-  in design.md
+============================================================
+5i. SPEC FILE MAINTENANCE (standing rule)
+============================================================
+Whenever ANY of these happens, IMMEDIATELY update .kiro/specs/redactron/
+in the same PR or as a follow-up `chore:` PR with auto-merge enabled:
+  - User pastes/references a master plan change (new milestone, scope change)
+  - A new Linear issue is created → add tasks.md entry
+  - An existing Linear issue is renamed or scope-changed → update tasks.md
+  - A milestone is added/removed/reordered → update tasks.md and requirements.md
+  - Architecture or data model changes → update design.md
+  - New module/file paths introduced → update repo layout reference
 
-Cross-referencing: when master plan IDs (e.g., M3.5.1) and Linear
-IDs (e.g., BLD-29) coexist, spec files reference both.
+Spec drift from Linear/master plan is a bug. Spec files always reflect the
+latest plan.
 
-Per-task spec hygiene: at step 8 of the per-task workflow, check if
-the task changed any of the above. If yes, the spec update goes in
-the same PR. If the task only added implementation without changing
-architecture or scope, the existing tasks.md entry is sufficient.
+============================================================
+6. uv init + pyproject.toml
+============================================================
+With the locked stack from tech.md (Python 3.11, PyMuPDF, presidio-analyzer,
+presidio-anonymizer, rapidfuzz, usaddress, pytesseract, typer, pydantic v2,
+keyring, cryptography; pytest/ruff/mypy as dev deps; gradio behind [ui]
+optional extra for v1.5; cryptography + keyring for vault).
 
---- TASK LIST ---
+============================================================
+7. PUSH INITIAL COMMIT TO GITHUB ON main
+============================================================
 
-Milestone M1 — Core engine (Days 1-4, 6 issues)
-  M1.1 Repo scaffolding: pyproject.toml, AGPL LICENSE, src/ layout, ruff/mypy config
-  M1.2 GitHub Actions CI (lint, type, test on Python 3.11 and 3.12, Linux + macOS)
-  M1.3 PyMuPDF text extraction with bounding boxes (src/redactron/extract/text_layer.py)
-  M1.4 Presidio detector wrapper (src/redactron/detect/presidio_detector.py)
-  M1.5 PyMuPDF redaction engine + apply_redactions() (src/redactron/redact/engine.py)
-  M1.6 CLI shell with Typer; init and run (single-file mode) commands
+============================================================
+8. STOP AND SHOW STATUS REPORT
+============================================================
+- Linear: project URL, all 6 milestone URLs, total issue count (34), URLs for
+  the 4 project documents
+- GitHub: repo URL, initial commit SHA, branch protection state
+- Local: tree of created files including .redactron/credits.db and
+  scripts/log-credits.sh
+- Next task suggested with its Linear ID and branch name
 
-Milestone M2 — Profile + variants (Days 5-7, 6 issues)
-  M2.1 Profile schema with Pydantic v2; YAML loader (src/redactron/profile.py)
-  M2.2 Name variant matching (rapidfuzz + tokenization) (detect/name_detector.py)
-  M2.3 Address normalization (usaddress + libpostal) and variant search (detect/address_detector.py)
-  M2.4 Account number partial redaction with last-4 preservation (redact/partial.py)
-  M2.5 Custom regex patterns from profile (detect/account_detector.py)
-  M2.6 Batch folder processing with progress bar (rich)
+DO NOT start implementation tasks (M1.3 onward) until I explicitly confirm.
 
-Milestone M3 — Verification + audit (Days 8-10, 6 issues)
-  M3.1 Verifier module: re-extract and re-detect post-redaction (verify/verifier.py)
-  M3.2 SQLite audit log + migrations (audit/log.py)
-  M3.3 Subjects table + --subject flag for multi-subject mode
-  M3.4 Markdown report generator (report/markdown.py)
-  M3.5 Dry-run mode with diff preview
-  M3.6 verify and log CLI commands
+============================================================
+FOR EVERY SUBSEQUENT TASK
+============================================================
 
-Milestone M4 — Polish + launch (Days 11-14, 4 issues)
-  M4.1 OCR fallback via pytesseract; image-region painting (extract/ocr.py)
+STRICT PR SERIALIZATION (mandatory):
+Before opening any new PR, run:
+    gh pr list --state open --json number,mergeStateStatus
+If ANY PR is in BLOCKED, BEHIND, DIRTY, UNSTABLE, or PENDING state, do NOT
+open a new PR. Poll every 30 seconds until all open PRs are MERGED or in
+CLEAN state with auto-merge enabled and CI complete. Only then proceed.
+Cherry-picking onto pending branches is forbidden — it produces conflicts
+that cost more to resolve than the time saved by parallel work.
+
+Per-task workflow:
+
+  1. git fetch origin && git checkout main && git pull
+  2. Move Linear issue to "In Progress"
+  3. git checkout -b m<phase>/<linear-id>-short-desc
+       e.g. m2/bld-7-profile-schema, m3.5/bld-29-vault-format
+  4. Implement, write tests, run:
+        uv run pytest && uv run ruff check && uv run mypy src/
+  5. If task changes architecture, data model, or repo layout: update
+     .kiro/specs/redactron/design.md (and tasks.md if scope changed) in the
+     same commit (Spec maintenance standing rule, 5i).
+  6. Conventional commit, push, open PR with "Closes BLD-N"
+  7. Run scripts/log-credits.sh <issue-id> <delta> <duration_seconds> sonnet|haiku <pr-url>
+  8. ENABLE auto-merge: gh pr merge --auto --squash --delete-branch
+     EXCEPTIONS — do NOT auto-merge these issues; open PR, post a Linear
+     comment summarizing approach + edge cases + test fixtures + known
+     limitations, then STOP and wait for my "merge it":
+         - BLD-19  (M4.1 OCR fallback / image-region painting)
+         - BLD-29  (M3.5.1 Encrypted vault file format + key management)
+         - BLD-30  (M3.5.2 macOS Keychain Services with Touch ID)
+     Note: BLD-13 (M3.1 verifier) was an exception during M3 and has shipped;
+     it's no longer a manual gate. Add new issues to the exception list ONLY
+     if I explicitly request it.
+  9. Poll PR until merged: gh pr view <num> --json state,mergedAt
+       Wait for state == "MERGED" before continuing.
+ 10. Verify Linear issue moved to "Done"; if not, move manually and post
+     "Auto-merged in PR #<num>" comment.
+ 11. Repeat for next task.
+
+============================================================
+DETECTION INVARIANTS (non-negotiable; tests enforce)
+============================================================
+
+1. Numeric tokens are NEVER fuzzy-matched in isolation.
+   Postal codes, SSNs, phone numbers, account numbers, decimals — exact match
+   or anchored regex only (e.g. \b91325\b, \d{3}-\d{2}-\d{4}). If a numeric
+   token reaches a fuzzy-match path, log.warning(...) and route to exact-match
+   only. NEVER assert+crash; users hit real-world tokens like "103 9.22".
+
+2. Multi-line redaction bboxes are LISTS, never unioned.
+   A multi-line span produces N rectangles (one per line). Sanity guard:
+   any single rect with area > 30% of page area or height > 4x median line
+   height is REJECTED with logged warning ("Redaction rect too large for
+   span <text>; rejecting to prevent over-redaction.").
+
+3. Detection is exhaustive per page.
+   Use re.finditer (not re.search). Find ALL occurrences of every profile
+   pattern. No first-match-wins. Per-string deduplication is forbidden;
+   each occurrence is a separate redaction target with its own bbox.
+
+4. Safety-net second pass.
+   After redaction, re-extract and re-detect. If survivors found, redact and
+   loop (max 3 passes). RedactionError if non-convergent. Successful
+   supplementation is logged at INFO level with calm language:
+     "Pass 2 supplemented pass 1 with N additional spans; output is complete."
+   NEVER log.warning() on the successful-completion path.
+
+5. Defensive warn+skip, not assert+crash.
+   Internal invariants (e.g. "numeric must use exact match") are enforced via
+   log.warning + graceful fallback, never assertions. Asserts crash users on
+   real-world edge cases. Apply this pattern across detect/, redact/, pipeline.
+
+============================================================
+LAYOUT HANDLING
+============================================================
+
+1. Column-aware extraction (default: column_aware=true).
+   Use get_text("dict") for blocks with bboxes. Cluster blocks by x-center
+   to detect columns. Process each column independently. Address bridging
+   logic operates ONLY within a single column (next "line" must be in the
+   same column AND within 2x median line height vertically).
+
+2. Figure text skipped by default (default: scan_figures=false).
+   Detect figure regions via page.get_drawings(). Text inside figure regions
+   is skipped. Opt-in via profile.detection.scan_figures=true for users who
+   want maximum coverage. Log at INFO when skipping:
+     "Skipped text inside figure region at <bbox>: typically not body PII."
+
+3. Image-only PDFs raise NoTextLayerError.
+   Pre-flight check: if page chars < 50 AND page has images, raise with:
+     "❌ This PDF appears to be a scan or image-only document with no text
+      layer. OCR support is coming in v1 milestone M4. Until then:
+        1. Re-export from source application with 'searchable text', OR
+        2. Run an OCR tool first (e.g. ocrmypdf input.pdf output.pdf)
+           and pass the OCR'd file to redactron.
+      If you believe this PDF DOES have a text layer, run with --debug."
+   Mixed PDFs (some text + some image pages): succeed; log image-only pages
+   as "Page N: 0 spans (image-only, OCR not yet enabled)".
+
+============================================================
+PROFILE SECURITY DEFAULTS
+============================================================
+
+1. detection.use_presidio: false (default).
+   Profile is authoritative. Presidio is opt-in with explicit entity list.
+   Default `redactron init` writes:
+       detection:
+         use_presidio: false
+         presidio_entities: []
+
+2. Profile / vault file mode: chmod 0600 (enforced on init and load).
+   Refuse to load if perms are looser. Mirror SSH id_rsa discipline. Friendly
+   error: "Profile permissions too permissive (mode <NNN>). Run: chmod 600 <path>".
+
+3. Auto-gitignore on init.
+   Detect git repo (cwd or ~/.redactron parent). Append .redactron/ to
+   .gitignore if not present. Print warning banner.
+
+4. Masked profile show by default.
+   redactron profile show outputs masked values:
+     ssns:           ["***-**-6789"]
+     account_numbers: ["************3456"]
+     emails:          ["t**@****.org"]
+     phones:          ["+1-***-***-1234"]
+     addresses:       ["[street redacted], <city>, <state>"]
+     display_name:    "T*** S***"
+   --reveal flag requires sys.stdin.isatty() AND interactive prompt.
+
+5. No PII in logs.
+   SafeFormatter scrubs known PII patterns from log emissions. Code-level rule:
+   never log raw SSN, full account, full address, full email/phone. Show
+   masked form or last-4 only.
+
+6. Cloud-sync warning on init.
+   Detect iCloud Drive / Dropbox / OneDrive / Google Drive paths. Warn user
+   prominently with instructions to relocate ~/.redactron.
+
+============================================================
+REPORTS WRITTEN BY DEFAULT
+============================================================
+
+Every successful redactron run writes three files:
+  <stem>_redacted.pdf
+  <stem>_report.md
+  <stem>_report.json
+
+Opt-out: --no-report flag (suppresses .md and .json).
+
+Every report includes: subject info, items detected (per detector type),
+items redacted, verification status (passed/failed + survivors list),
+processing duration, profile used, run timestamp, run_id (for re-rendering
+via `redactron report <run_id>`).
+
+============================================================
+DEFAULTS
+============================================================
+
+- Sonnet 4.6 by default; Haiku 4.5 only when /model haiku prefixed
+- Conventional commits (feat, fix, docs, test, chore, refactor)
+- One Linear issue per PR
+- Never skip tests, ruff, or mypy
+- Never skip scripts/log-credits.sh
+- If MCP servers fail mid-task: reconnect once, then ask me
+- If a CI failure looks systemic (>2 attempts to fix): stop and ping me
+- If credits >= 1080: post alert + ask before continuing
+- If credits >= 1283: stop auto-execution; require approval per task
+
+============================================================
+TASK LIST
+============================================================
+
+Milestone M1 — Core engine (Days 1-4, 6 issues, ~280 credits)
+  M1.1 Repo scaffolding: pyproject.toml, AGPL LICENSE, src/ layout, ruff/mypy config            (haiku)
+  M1.2 GitHub Actions CI (lint, type, test on Python 3.11 + 3.12, Linux + macOS)                (haiku)
+  M1.3 PyMuPDF text extraction with bounding boxes (extract/text_layer.py, column-aware)        (sonnet)
+  M1.4 Presidio detector wrapper (detect/presidio_detector.py)                                  (sonnet)
+  M1.5 PyMuPDF redaction engine + apply_redactions() with bbox sanity guards (redact/engine.py) (sonnet)
+  M1.6 CLI shell with Typer; init and run (single-file mode) commands                           (sonnet)
+
+Milestone M2 — Profile + variants (Days 5-7, 6 issues, ~310 credits)
+  M2.1 Profile schema (Pydantic v2) + YAML loader; chmod 0600 + perm enforcement                (sonnet)
+  M2.2 Name variant matching (rapidfuzz + tokenization); corporate-suffix suppression           (sonnet)
+  M2.3 Address normalization (libpostal expand + usaddress); multi-line bridging within column  (sonnet)
+  M2.4 Account number partial redaction with last-4 preservation                  MANUAL REVIEW (sonnet)
+  M2.5 Custom regex patterns from profile (anchored boundaries; no fuzzy on numeric)            (sonnet)
+  M2.6 Batch folder processing with progress bar (rich); reports written by default             (haiku)
+
+Milestone M3 — Verification + audit (Days 8-10, 6 issues, ~250 credits)
+  M3.1 Verifier: re-extract and re-detect post-redaction; preserve_last suffix handling         (sonnet)
+  M3.2 SQLite audit log + migrations (audit/log.py)                                             (sonnet)
+  M3.3 Subjects table + --subject flag for multi-subject mode                                   (sonnet)
+  M3.4 Markdown + JSON report generator; written by default; --no-report opt-out                (haiku)
+  M3.5-DRY Dry-run mode with diff preview                                                       (sonnet)
+  M3.6 verify and log CLI commands                                                              (haiku)
+
+Milestone M3.5 — Encrypted multi-client profile vault (Days 11-13, 6 issues, ~350 credits, security)
+[INSERT YOUR M3.5 CHUNKS HERE — replace this skeleton with your refined task descriptions]
+  M3.5.1 (BLD-29) Encrypted vault file format + key management abstraction          MANUAL REVIEW (sonnet)
+       AES-256-GCM, per-vault salt, KDF (Argon2id or HKDF from keychain master),
+       pluggable backend interface for keychain providers
+  M3.5.2 (BLD-30) macOS Keychain Services integration with Touch ID                  MANUAL REVIEW (sonnet)
+       keyring lib with kSecAccessControlBiometryAny; Linux/Windows backends
+       stubbed with NotImplementedError for v1.1
+  M3.5.3 (BLD-31) Multi-client profile CRUD commands                                              (sonnet/haiku)
+       profile add/list/show/edit/delete/rename; masked by default; --reveal
+       requires Touch ID + TTY confirmation
+  M3.5.4 (BLD-32) Migration from single profile.yaml                                              (sonnet)
+       profile import <yaml> --client <id>; secure-wipe via overwrite-then-unlink;
+       dry-run preview; idempotent re-runs
+  M3.5.5 (BLD-33) CLI --client <id> flag on all profile-using commands                            (haiku)
+       Update run/dry-run/verify/log/profile show|edit; legacy profile.yaml
+       fallback with deprecation warning; default client = "default"
+  M3.5.6 (BLD-34) SECURITY.md + PROFILE.md vault section + integration tests                      (haiku)
+       End-to-end: init vault → add 2 profiles → run with each → verify zero
+       plaintext on disk; perf test for Touch ID overhead < 2s
+
+Milestone M4 — Polish + launch (Days 14-17, 4 issues, ~120 credits)
+  M4.1 (BLD-19) OCR fallback via pytesseract; image-region painting                  MANUAL REVIEW (sonnet)
   M4.2 Synthetic test corpus: 10 PDFs (bank statement, utility bill, medical record,
-       tax form, insurance EOB, court doc, payslip, lab report, invoice, leasing agreement)
-  M4.3 Docs: README, PROFILE.md, PRIVACY.md, demo GIF
-  M4.4 PyPI release flow (GitHub Actions + trusted publishing) and first published version
+       tax form, insurance EOB, court doc, payslip, lab report, invoice, leasing
+       agreement, two-column research paper, multi-line address fixture)                          (haiku)
+  M4.3 Docs: README, PROFILE.md, PRIVACY.md, SECURITY.md, demo GIF                                (haiku)
+  M4.4 PyPI release flow (GitHub Actions + trusted publishing) and first published version       (haiku)
 
-Milestone M5 — Web UI (Days 15-20, 6 issues, v1.5 — keep in Backlog until v1 ships)
-  M5.1 Gradio app skeleton (src/redactron/web/app.py) with file upload + run button
-  M5.2 Visual diff preview: before/after side-by-side per page using PyMuPDF rendering
-  M5.3 Profile editor: load/edit/save profile.yaml from a web form
-  M5.4 Audit log viewer: filterable table by subject and date range
-  M5.5 redactron ui CLI command that boots Gradio and auto-opens the browser
-  M5.6 Web UI screenshots in README + pip install redactron[ui] extra in pyproject.toml
+Milestone M5 — Web UI (Days 18-23, 6 issues, ~300 credits, v1.5 — Backlog until v1 ships)
+  M5.1 Gradio app skeleton (src/redactron/web/app.py) with file upload + run button              (sonnet)
+  M5.2 Visual diff preview: before/after side-by-side per page using PyMuPDF rendering            (sonnet)
+  M5.3 Profile editor: load/edit/save profile.yaml from a web form (vault-aware via --client)    (haiku)
+  M5.4 Audit log viewer: filterable table by subject and date range                               (haiku)
+  M5.5 redactron ui CLI command that boots Gradio and auto-opens the browser                     (haiku)
+  M5.6 Web UI screenshots in README + pip install redactron[ui] extra                            (haiku)
 
---- REPO LAYOUT ---
+============================================================
+REPO LAYOUT
+============================================================
 
 redactron/
 ├── .github/
@@ -283,108 +527,145 @@ redactron/
 │   ├── settings/mcp.json
 │   ├── steering/{product,tech,conventions}.md
 │   ├── specs/redactron/{requirements,design,tasks}.md
-│   └── hooks/{on-task-start,on-tests-pass,on-pr-merge}.yml
+│   ├── hooks/{on-task-start,on-tests-pass,on-pr-merge}.yml
+│   └── kickoff_prompt.md                  # this file
 ├── .redactron/
-│   └── credits.db                        # local credit usage log
+│   └── credits.db                          # local credit usage log (gitignored)
+├── scripts/
+│   └── log-credits.sh                      # credit tracking script
 ├── src/redactron/
 │   ├── __init__.py
 │   ├── cli.py
 │   ├── config.py
+│   ├── pipeline.py                         # orchestrator (run_pipeline)
 │   ├── profile.py
+│   ├── errors.py
 │   ├── detect/{presidio_detector,address_detector,account_detector,name_detector}.py
-│   ├── extract/{text_layer,ocr}.py
+│   ├── extract/{text_layer,ocr,layout}.py  # layout = column detection + figure regions
 │   ├── redact/{engine,partial}.py
 │   ├── verify/verifier.py
 │   ├── audit/log.py
-│   ├── report/markdown.py
-│   └── web/app.py                        # M5 only
+│   ├── report/{markdown,json}.py
+│   ├── vault/                              # M3.5
+│   │   ├── __init__.py
+│   │   ├── store.py                        # AES-256-GCM file format
+│   │   ├── keychain.py                     # OS keychain abstraction
+│   │   └── migrate.py                      # yaml → vault migration
+│   └── web/app.py                          # M5
 ├── tests/
 │   ├── fixtures/
+│   ├── test_run_pipeline.py
 │   ├── test_detect.py
 │   ├── test_redact.py
-│   └── test_verify.py
-├── docs/{PROFILE,PRIVACY}.md
+│   ├── test_verify.py
+│   ├── test_layout.py
+│   ├── test_report.py
+│   ├── test_audit.py
+│   ├── test_vault.py                       # M3.5
+│   ├── test_keychain.py                    # M3.5
+│   └── test_migration.py                   # M3.5
+├── docs/
+│   ├── PROFILE.md
+│   ├── PRIVACY.md
+│   ├── SECURITY.md                         # M3.5/M4
+│   └── examples/
 ├── pyproject.toml
-├── LICENSE                               # AGPL-3.0
+├── uv.lock                                 # commit this for CI reproducibility
+├── LICENSE                                 # AGPL-3.0
 ├── README.md
 └── CHANGELOG.md
 
---- DATA MODEL ---
+============================================================
+DATA MODEL
+============================================================
 
-# profile.yaml
+# profile.yaml (or one row in vault.enc keyed by client_id)
 version: 1
 name: default
 subject:
   display_name: "Tejinder Singh"
   aliases: ["Tejinder", "T. Singh", "Singh, Tejinder"]
-  addresses:
-    - "100 Phillip Street, San Jose, CA 95020, USA"
-  phones: ["+1-408-555-1234"]
+  addresses: ["100 Phillip Street, San Jose, CA 95020, USA"]
+  phones: ["+1-408-000-0000"]
   emails: ["tejinder.singh@ieee.org"]
-  ssns: ["xxx-xx-xxxx"]
+  ssns: []
   account_numbers:
-    - value: "1234567890123456"
-      preserve_last: 4
-  custom_patterns:
-    - name: patient_id
-      regex: "PT-\\d{6}"
+    - { value: "1234567890123456", preserve_last: 4 }
+  custom_patterns: []
 detection:
-  use_presidio: true
-  presidio_entities:
-    [PERSON, LOCATION, PHONE_NUMBER, EMAIL_ADDRESS, US_SSN, CREDIT_CARD, DATE_TIME]
+  use_presidio: false
+  presidio_entities: []
   fuzzy_match: true
   match_threshold: 0.85
   full_token_min_length: 2
   ocr_fallback: true
+  column_aware: true
+  scan_figures: false
+  address_line_bridge_window: 3
 
-# Audit DB
+# Audit DB (.redactron/audit.db)
 CREATE TABLE documents (
   id INTEGER PRIMARY KEY,
   file_hash TEXT NOT NULL,
-  original_filename TEXT,
-  output_filename TEXT,
+  original_filename TEXT, output_filename TEXT,
   processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  profile_name TEXT,
-  subject_id TEXT,
-  pages_processed INTEGER,
-  items_detected INTEGER,
-  items_redacted INTEGER,
-  verification_passed BOOLEAN,
-  verification_survivors_json TEXT,
-  duration_ms INTEGER,
-  notes TEXT
+  profile_name TEXT, subject_id TEXT, client_id TEXT,
+  pages_processed INTEGER, items_detected INTEGER, items_redacted INTEGER,
+  verification_passed BOOLEAN, verification_survivors_json TEXT,
+  duration_ms INTEGER, notes TEXT
 );
-
 CREATE TABLE subjects (
-  id TEXT PRIMARY KEY,
-  display_name TEXT,
+  id TEXT PRIMARY KEY, display_name TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  last_used_at TIMESTAMP,
-  document_count INTEGER DEFAULT 0
+  last_used_at TIMESTAMP, document_count INTEGER DEFAULT 0
 );
 
-# Credit usage log
+# Credits log (.redactron/credits.db)
 CREATE TABLE usage (
   id INTEGER PRIMARY KEY,
   timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  task_id TEXT,
-  milestone TEXT,
-  model TEXT,
-  delta INTEGER,
-  duration_seconds INTEGER,
-  total_after INTEGER,
-  pr_url TEXT,
-  notes TEXT
+  task_id TEXT, milestone TEXT, model TEXT,
+  delta INTEGER, duration_seconds INTEGER, total_after INTEGER,
+  pr_url TEXT, notes TEXT
 );
 
---- CLI SURFACE ---
+# Vault (~/.redactron/vault.enc — AES-256-GCM; master key in OS keychain)
+# Decrypted in-memory only. Schema of decrypted contents:
+{
+  "version": 1,
+  "salt": "<base64 per-vault salt>",       # also written to vault.salt
+  "profiles": {
+    "<client_id>": {
+      "display_name": "<string>",
+      "created_at": "<ISO8601>",
+      "updated_at": "<ISO8601>",
+      "profile_json": { ... full profile.yaml structure ... },
+      "notes": "<optional>"
+    },
+    ...
+  }
+}
 
-redactron init
-redactron run <path> [--profile, --output, --threshold, --ocr, --no-verify, --json]
-redactron verify <path>
-redactron log [--subject, --json]
-redactron profile show|edit|add|list
+============================================================
+CLI SURFACE
+============================================================
+
+redactron init                                       # creates profile + .redactron/
+redactron run <path> [--profile|--client, --output, --threshold, --ocr,
+                      --no-verify, --no-report, --subject/-s, --debug, --json]
+redactron verify <path> [--client]                   # re-verify already-redacted PDF
+redactron log [--subject, --client, --limit, --json] # query audit log
+redactron report <run_id>                            # re-render markdown report
+redactron dry-run <path> [--client, --json]         # preview without writing files
+redactron profile show [<id>] [--reveal] [--client]
+redactron profile edit [<id>] [--client]
+redactron profile add [--client <id>] [--from <yaml>]
+redactron profile list
+redactron profile delete <id>
+redactron profile rename <old> <new>
+redactron profile import <yaml> --client <id>        # M3.5: migrate legacy yaml
 redactron subject add|list|show <id>
-redactron dry-run <path>
-redactron report <run_id>
-redactron ui                                 # M5: launch Gradio web UI
+redactron vault init                                 # M3.5: create encrypted vault
+redactron ui                                         # M5: launch Gradio web UI
+
+GO.
