@@ -235,6 +235,225 @@ Files: `src/redactron/cli.py`
 
 ---
 
+## Milestone M3.5 — Encrypted multi-client profile vault (security, Days 11–13)
+
+### M3.5.1 Encrypted vault file format + key management abstraction
+**Linear:** BLD-29 | **Model:** sonnet | **Type:** feat
+
+## Goal
+Implement AES-256-GCM encrypted vault file with per-vault salt, KDF, and a pluggable
+keychain backend interface.
+
+## Implementation notes
+- Vault file: `~/.redactron/vault.enc` (AES-256-GCM ciphertext)
+- Salt file: `~/.redactron/vault.salt` (random, per-vault, stored plaintext)
+- KDF: Argon2id (or HKDF) deriving encryption key from master secret retrieved via keychain
+- `KeychainBackend` abstract base class with `get_master_key() → bytes` and
+  `set_master_key(key: bytes) → None`
+- `VaultStore` class: `open(backend) → Vault`, `seal(vault, backend) → None`
+- Profile entry schema: `client_id` (slug PK), `display_name`, `created_at`,
+  `updated_at`, `profile_json` (full Profile struct serialized), `notes` (encrypted)
+- Raise `VaultError` (new typed exception in `redactron.errors`) on any crypto failure
+
+## Files touched
+- `src/redactron/vault/__init__.py`
+- `src/redactron/vault/store.py`
+- `src/redactron/vault/keychain.py` (abstract base + `KeychainBackend` interface)
+- `src/redactron/errors.py` (add `VaultError`)
+- `tests/test_vault.py`
+
+## Acceptance criteria
+- [ ] Unit tests pass
+- [ ] mypy strict passes for affected modules
+- [ ] `vault.enc` is opaque ciphertext (`cat vault.enc | strings` shows no plaintext PII)
+- [ ] Re-opening vault with correct key returns identical plaintext
+- [ ] Wrong key raises `VaultError`
+
+## Model preference
+sonnet
+
+## Linked spec
+.kiro/specs/redactron/tasks.md#m351-encrypted-vault-file-format--key-management-abstraction
+
+---
+
+### M3.5.2 macOS Keychain Services integration with Touch ID
+**Linear:** BLD-30 | **Model:** sonnet | **Type:** feat
+
+## Goal
+Implement macOS Keychain backend using the `keyring` library with biometric access
+control; stub Linux/Windows backends with `NotImplementedError`.
+
+## Implementation notes
+- `MacOSKeychainBackend(KeychainBackend)`: uses `keyring` with macOS-specific
+  `kSecAccessControlBiometryAny` access control flag
+- Touch ID prompt fires on every `get_master_key()` call (no caching)
+- `LinuxKeychainBackend` and `WindowsKeychainBackend`: raise `NotImplementedError`
+  with message "Keychain backend not yet supported on <platform>; available in v1.1"
+- `get_keychain_backend() → KeychainBackend` factory: auto-detects platform via
+  `sys.platform`
+- `redactron vault init`: generates 32-byte random master key, stores in keychain,
+  creates `vault.enc` + `vault.salt`
+
+## Files touched
+- `src/redactron/vault/keychain.py`
+- `tests/test_keychain.py`
+
+## Acceptance criteria
+- [ ] Unit tests pass (macOS backend mocked; stubs raise NotImplementedError)
+- [ ] mypy strict passes
+- [ ] Touch ID prompts on every vault access on macOS (verified in integration test)
+- [ ] Touch ID overhead < 2 seconds added to typical run
+
+## Model preference
+sonnet
+
+## Linked spec
+.kiro/specs/redactron/tasks.md#m352-macos-keychain-services-integration-with-touch-id
+
+---
+
+### M3.5.3 Multi-client profile CRUD commands
+**Linear:** BLD-31 | **Model:** sonnet | **Type:** feat
+
+## Goal
+Implement `profile add/list/show/edit/delete/rename` CLI commands with masked output
+by default and Touch ID–gated `--reveal`.
+
+## Implementation notes
+- `redactron profile add --client <id>`: interactive prompts or `--import <yaml>`
+- `redactron profile list`: shows `client_id` + `display_name` only (no PII)
+- `redactron profile show <id>`: masked by default; `--reveal` requires Touch ID + TTY
+- `redactron profile edit <id>`: opens `$EDITOR` with decrypted YAML; re-encrypts on save
+- `redactron profile delete <id>`: confirmation prompt; secure-wipes entry
+- `redactron profile rename <id> <new-id>`: renames slug, preserves data
+- All commands load vault via `VaultStore` + `get_keychain_backend()`
+
+## Files touched
+- `src/redactron/cli.py`
+- `src/redactron/vault/store.py`
+
+## Acceptance criteria
+- [ ] Unit tests pass
+- [ ] mypy strict passes
+- [ ] `profile list` shows no plaintext PII
+- [ ] `profile show --reveal` requires Touch ID on macOS
+- [ ] `profile show` without `--reveal` shows masked values
+
+## Model preference
+sonnet (show/reveal logic); haiku (boilerplate CRUD)
+
+## Linked spec
+.kiro/specs/redactron/tasks.md#m353-multi-client-profile-crud-commands
+
+---
+
+### M3.5.4 Migration from single profile.yaml
+**Linear:** BLD-32 | **Model:** sonnet | **Type:** feat
+
+## Goal
+Implement `profile import <yaml> --client <id>` to migrate legacy `profile.yaml`
+into the vault with secure-wipe of the source file.
+
+## Implementation notes
+- `redactron profile import old.yaml --client <id>`: reads YAML, validates with
+  Pydantic, inserts into vault, then secure-wipes source
+- Secure-wipe: overwrite file with random bytes (3 passes), then `unlink`
+- `--dry-run`: preview what would be imported without writing or wiping
+- Idempotent: if `client_id` already exists, prompt to overwrite or skip
+- `src/redactron/vault/migrate.py`: `migrate_profile(path, client_id, vault, dry_run)`
+
+## Files touched
+- `src/redactron/vault/migrate.py`
+- `src/redactron/cli.py`
+- `tests/test_migration.py`
+
+## Acceptance criteria
+- [ ] Unit tests pass
+- [ ] mypy strict passes
+- [ ] Source file is unreadable after import (secure-wipe verified)
+- [ ] `--dry-run` writes nothing and wipes nothing
+- [ ] Idempotent: re-running with same client_id prompts rather than silently overwriting
+
+## Model preference
+sonnet
+
+## Linked spec
+.kiro/specs/redactron/tasks.md#m354-migration-from-single-profileyaml
+
+---
+
+### M3.5.5 CLI --client flag on all profile-using commands
+**Linear:** BLD-33 | **Model:** haiku | **Type:** feat
+
+## Goal
+Add `--client <id>` flag to `run`, `dry-run`, `verify`, `log`, and `profile show|edit`
+commands; legacy `profile.yaml` fallback with deprecation warning; default client = "default".
+
+## Implementation notes
+- `--client <id>` on `run`/`dry-run`/`verify`: loads profile from vault for given client
+- `--client` on `log`: filters audit rows by `client_id`
+- Legacy fallback: if `~/.redactron/profile.yaml` exists and `--client` not given,
+  load it with `DeprecationWarning: profile.yaml is deprecated; migrate with
+  'redactron profile import'`
+- Default client slug: `"default"` (used when vault exists but `--client` omitted)
+- `get_profile(client_id, vault) → Profile` helper in `vault/store.py`
+
+## Files touched
+- `src/redactron/cli.py`
+- `src/redactron/vault/store.py`
+
+## Acceptance criteria
+- [ ] Unit tests pass
+- [ ] mypy strict passes
+- [ ] `redactron run doc.pdf --client acme` loads correct profile via Touch ID
+- [ ] Legacy `profile.yaml` triggers deprecation warning
+- [ ] All existing detection tests pass against vault-loaded profiles
+
+## Model preference
+haiku
+
+## Linked spec
+.kiro/specs/redactron/tasks.md#m355-cli---client-flag-on-all-profile-using-commands
+
+---
+
+### M3.5.6 SECURITY.md + PROFILE.md vault section + integration tests
+**Linear:** BLD-34 | **Model:** haiku | **Type:** docs/test
+
+## Goal
+Write `docs/SECURITY.md`, add vault section to `docs/PROFILE.md`, and implement
+end-to-end integration tests verifying zero plaintext on disk and Touch ID overhead.
+
+## Implementation notes
+- `docs/SECURITY.md`: threat model, vault design, key management, secure-wipe procedure,
+  platform support matrix, responsible disclosure
+- `docs/PROFILE.md` vault section: vault init, profile add/import, `--client` usage
+- Integration test: init vault → add 2 profiles → run with each → assert zero plaintext
+  PII in `vault.enc`, swap, temp files, and core dump path
+- Performance test: Touch ID overhead < 2 seconds (mocked in CI; real on macOS)
+- Zero plaintext assertion: `strings vault.enc | grep -i <known_pii>` returns empty
+
+## Files touched
+- `docs/SECURITY.md`
+- `docs/PROFILE.md`
+- `tests/test_vault.py` (integration tests appended)
+
+## Acceptance criteria
+- [ ] Unit + integration tests pass
+- [ ] mypy strict passes
+- [ ] `cat vault.enc | strings` shows no plaintext PII
+- [ ] Touch ID overhead < 2 seconds in perf test
+- [ ] All existing detection tests pass
+
+## Model preference
+haiku
+
+## Linked spec
+.kiro/specs/redactron/tasks.md#m356-securitymd--profilemd-vault-section--integration-tests
+
+---
+
 ## Milestone M4 — Polish + launch (Days 11–14)
 
 ### M4.1 OCR fallback via pytesseract

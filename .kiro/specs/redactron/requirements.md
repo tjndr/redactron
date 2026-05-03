@@ -51,6 +51,31 @@ visual diff, edit my profile, and browse the audit log without using the termina
 - Profile editable via UI
 - Audit log filterable by subject and date range
 
+## M3.5 — Encrypted multi-client profile vault
+
+### US-6 Encrypted client profiles (M3.5)
+As a solo professional managing multiple clients, I want each client's PII encrypted at
+rest so that an accidental leak (git commit, cloud sync) does not expose all client data
+at once.
+
+### US-7 Biometric auth on profile access (M3.5)
+As a privacy-minded individual, I want biometric auth on profile access so that physical
+access to my unlocked machine does not immediately expose my profile.
+
+**Acceptance criteria (M3.5):**
+- `redactron vault init` creates encrypted vault + generates master key in keychain
+- `redactron profile add --client <id>` creates entry (interactive or YAML import)
+- `redactron profile list` shows client IDs + display names only (no plaintext PII)
+- `redactron profile show <id> --reveal` requires Touch ID + TTY
+- `redactron profile import old.yaml --client <id>` migrates + secure-wipes the source
+- `redactron run statement.pdf --client <id>` loads correct profile via Touch ID
+- Touch ID prompts on every vault access on macOS
+- Vault file is opaque ciphertext (`cat vault.enc | strings` shows no plaintext PII)
+- Legacy `profile.yaml` works with deprecation warning
+- Zero plaintext PII in logs, swap, temp files, core dumps
+- All existing detection tests pass against vault-loaded profiles
+- Touch ID overhead < 2 seconds added to typical run
+
 ## Non-goals (v1)
 - Cloud SaaS or multi-user web app
 - Real-time/streaming redaction
