@@ -115,7 +115,7 @@ detection:
 
 **Figure text:** When `detection.scan_figures: false` (default), text inside figure/drawing regions is not redacted. Set `scan_figures: true` to include figure text (e.g., if your PDFs contain PII in chart labels or captions).
 
-**Image-only PDFs:** If a PDF has no extractable text layer (scanned document), redactron raises `NoTextLayerError` with a friendly message. OCR support is coming in M4. Until then, pre-process with `ocrmypdf input.pdf output.pdf`.
+**Image-only PDFs:** If a PDF has no extractable text layer (scanned document), use the `--ocr` flag to enable OCR fallback via pytesseract (requires Tesseract installed). Without `--ocr`, redactron raises `NoTextLayerError` with a friendly message. Default DPI: 300; confidence threshold: 60.
 
 ### Configuration reference
 
