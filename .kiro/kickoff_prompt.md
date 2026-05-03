@@ -195,6 +195,33 @@ For every subsequent task:
 Use Claude Sonnet 4.6 by default. Switch to Claude Haiku 4.5 only when I prefix
 a message with /model haiku.
 
+## Spec file maintenance (standing rule)
+
+Whenever ANY of these happens, IMMEDIATELY update the affected file
+in .kiro/specs/redactron/ in the same PR or as a follow-up `chore:`
+PR with auto-merge enabled. Spec drift from Linear/master plan is a
+bug.
+
+- User pastes or references a master plan change (new milestone,
+  scope change, architecture change)
+- A new Linear issue is created → add tasks.md entry
+- An existing Linear issue is renamed or scope-changed → update
+  tasks.md
+- A milestone is added/removed/reordered → update tasks.md and
+  requirements.md acceptance section
+- Architecture, data model, or repo layout changes → update
+  design.md
+- New module/file paths introduced → update repo layout reference
+  in design.md
+
+Cross-referencing: when master plan IDs (e.g., M3.5.1) and Linear
+IDs (e.g., BLD-29) coexist, spec files reference both.
+
+Per-task spec hygiene: at step 8 of the per-task workflow, check if
+the task changed any of the above. If yes, the spec update goes in
+the same PR. If the task only added implementation without changing
+architecture or scope, the existing tasks.md entry is sufficient.
+
 --- TASK LIST ---
 
 Milestone M1 — Core engine (Days 1-4, 6 issues)
