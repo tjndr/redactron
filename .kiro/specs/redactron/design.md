@@ -269,3 +269,42 @@ All typed exceptions live in `redactron.errors`:
 - `VerificationError` — survivors found post-redaction
 
 CLI catches all and prints user-friendly messages; `--debug` shows full stack trace.
+
+## OCR Fallback (BLD-19)
+
+### Trigger
+Per-page auto-detection: if `len(page.get_text().strip()) < 50`, the page is
+treated as image-only and passed to Tesseract.  Mixed PDFs (some text pages,
+some image pages) are handled correctly — only image pages are OCR'd.
+
+### Coordinate conversion
+Tesseract returns bounding boxes in **pixel space** at the render DPI.
+PDF coordinates are in **points** (1 pt = 1/72 inch).  The conversion is:
+
+```
+scale = 72 / dpi          # e.g. 72/300 = 0.24
+pdf_x = pixel_x * scale
+```
+
+Omitting this scale factor would place redaction boxes ~4.17× too large at
+300 DPI (the default), causing severe over-redaction.
+
+### Confidence threshold
+Words with Tesseract confidence < 60 are skipped and counted in
+`OcrPageResult.low_conf_count`.  A warning is logged per page.
+
+### Sanity guards (reused thresholds)
+Same constants as `redact/engine.py`:
+- Reject word bbox covering > 30% of page area.
+- Reject word bbox taller than 4× median word height on that page.
+
+### Redaction strategy
+Image pages have no text content stream, so `page.add_redact_annot` has
+nothing to remove.  Instead, `paint_ocr_redactions` uses
+`page.draw_rect(rect, color=(0,0,0), fill=(0,0,0))` to paint black rectangles
+directly into the page content stream.
+
+### CLI flags
+`--ocr` / `--no-ocr` on the `run` command.  Default: `--no-ocr` (auto-detect
+still raises `NoTextLayerError` for fully image-only PDFs without the flag).
+
