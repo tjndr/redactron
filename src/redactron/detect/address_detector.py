@@ -11,6 +11,7 @@ Matching strategy (over-redaction safe):
 
 from __future__ import annotations
 
+import logging
 import re
 
 import usaddress
@@ -19,6 +20,8 @@ from rapidfuzz import fuzz
 from redactron.detect.presidio_detector import Detection
 from redactron.extract.text_layer import TextLayer
 from redactron.profile import Profile
+
+log = logging.getLogger(__name__)
 
 _ABBR_TO_FULL: dict[str, str] = {
     "st": "street", "ave": "avenue", "av": "avenue", "blvd": "boulevard",
@@ -48,7 +51,7 @@ _ADDRESS_REQUIRED_LABELS = frozenset({"StreetName", "StreetNamePreDirectional"})
 
 
 def _is_numeric_token(s: str) -> bool:
-    return s.replace("-", "").replace(" ", "").replace(".", "").isdigit()
+    return s.replace("-", "").replace(" ", "").replace(".", "").replace(",", "").isdigit()
 
 
 def _normalize_street_type(token: str) -> str:
@@ -87,6 +90,11 @@ def _is_address_candidate(text: str) -> bool:
     if not stripped or len(stripped) < 5:
         return False
     if _is_numeric_token(stripped):
+        log.warning(
+            "Skipping fuzzy match for numeric span %r (exact-match only). "
+            "This prevents over-redaction of unrelated digits.",
+            stripped[:60],
+        )
         return False
     try:
         tagged, _ = usaddress.tag(stripped)
@@ -255,10 +263,13 @@ def detect_addresses(
         combined_text = " ".join(lay.text for lay in group if lay.text.strip())
         normalized_text = _normalize_address(combined_text)
 
-        assert not _is_numeric_token(normalized_text), (
-            f"Numeric token reached fuzzy match: {normalized_text!r}. "
-            "Numeric tokens must use exact/regex match, not fuzzy."
-        )
+        if _is_numeric_token(normalized_text):
+            log.warning(
+                "Skipping fuzzy match for numeric span %r (exact-match only). "
+                "This prevents over-redaction of unrelated digits.",
+                combined_text[:60],
+            )
+            continue
 
         for norm_addr in normalized_addresses:
             score = fuzz.partial_ratio(norm_addr, normalized_text)
