@@ -69,6 +69,7 @@ def run(
     no_verify: bool = typer.Option(False, "--no-verify", help="Skip post-redaction verification."),
     json_output: bool = typer.Option(False, "--json", help="Output results as JSON."),
     subject: str = typer.Option("", "--subject", "-s", help="Subject slug for audit tagging."),
+    no_report: bool = typer.Option(False, "--no-report", help="Skip writing report files."),
     debug: bool = typer.Option(False, "--debug", help="Show full stack traces on error."),
 ) -> None:
     """Redact PII from a PDF file or directory of PDFs."""
@@ -104,6 +105,7 @@ def run(
             verify=not no_verify,
             json_output=json_output,
             subject_id=subject,
+            write_reports=not no_report,
         )
     except RedactronError as exc:
         _error(str(exc), debug=debug, exc=exc)
@@ -119,6 +121,7 @@ def _run_pipeline(
     verify: bool,
     json_output: bool,
     subject_id: str = "",
+    write_reports: bool = True,
 ) -> None:
     """Orchestrate extract → detect → redact → verify for one or more PDFs."""
     from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
@@ -151,6 +154,7 @@ def _run_pipeline(
                 profile,
                 score_threshold=threshold,
                 verify=verify,
+                write_reports=write_reports,
             )
 
             r: dict[str, object] = {
