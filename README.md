@@ -23,3 +23,4 @@ redactron run document.pdf     # redacts and verifies
 ## License
 
 AGPL-3.0 — see [LICENSE](LICENSE).
+ # tiny diff
