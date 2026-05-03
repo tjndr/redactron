@@ -1,12 +1,22 @@
-"""Tests for src/redactron/extract/text_layer.py."""
+"""Tests for src/redactron/extract/text_layer.py and ocr.py."""
 
 import io
 from pathlib import Path
+from unittest.mock import patch
 
 import fitz
 import pytest
 
 from redactron.errors import ExtractionError
+from redactron.extract.ocr import (
+    CONF_THRESHOLD,
+    DEFAULT_DPI,
+    OcrPageResult,
+    OcrWord,
+    _is_image_page,
+    ocr_page,
+    paint_ocr_redactions,
+)
 from redactron.extract.text_layer import TextLayer, extract_text_layers, open_pdf
 
 
@@ -130,3 +140,188 @@ def test_extract_text_layers_page_error_raises() -> None:
 
     with pytest.raises(ExtractionError, match="Failed to extract text"):
         extract_text_layers(mock_doc)
+
+
+# ---------------------------------------------------------------------------
+# OCR module tests (BLD-19)
+# ---------------------------------------------------------------------------
+
+
+def _make_image_pdf() -> fitz.Document:
+    """Create a single-page PDF with an embedded image and no text layer."""
+    doc = fitz.open()
+    page = doc.new_page(width=612, height=792)
+    # Insert a small white rectangle as a stand-in image (no text)
+    page.draw_rect(fitz.Rect(0, 0, 612, 792), color=(1, 1, 1), fill=(1, 1, 1))
+    buf = io.BytesIO(doc.tobytes())
+    return fitz.open(stream=buf, filetype="pdf")
+
+
+def _make_text_pdf() -> fitz.Document:
+    """Create a single-page PDF with a text layer (>50 chars)."""
+    doc = fitz.open()
+    page = doc.new_page()
+    # Long enough to exceed the 50-char image-page threshold
+    page.insert_text((72, 72), "Hello World this is a text page with enough content", fontsize=12)
+    buf = io.BytesIO(doc.tobytes())
+    return fitz.open(stream=buf, filetype="pdf")
+
+
+def _mock_tesseract_data(words: list[tuple[str, int, int, int, int, int, int]]) -> dict:
+    """Build a pytesseract image_to_data DICT result.
+
+    Each tuple: (text, conf, left, top, width, height, level)
+    """
+    return {
+        "text": [w[0] for w in words],
+        "conf": [w[1] for w in words],
+        "left": [w[2] for w in words],
+        "top": [w[3] for w in words],
+        "width": [w[4] for w in words],
+        "height": [w[5] for w in words],
+        "level": [w[6] for w in words],
+    }
+
+
+def test_is_image_page_true_for_empty_page() -> None:
+    doc = _make_image_pdf()
+    assert _is_image_page(doc[0]) is True
+
+
+def test_is_image_page_false_for_text_page() -> None:
+    doc = _make_text_pdf()
+    assert _is_image_page(doc[0]) is False
+
+
+def test_ocr_word_dataclass_frozen() -> None:
+    w = OcrWord(page_num=0, text="hello", bbox=(0.0, 0.0, 10.0, 10.0), conf=90)
+    with pytest.raises(Exception):
+        w.text = "changed"  # type: ignore[misc]
+
+
+def test_ocr_page_returns_result_with_words() -> None:
+    """ocr_page with mocked tesseract returns OcrWord list."""
+    doc = _make_image_pdf()
+    page = doc[0]
+
+    mock_data = _mock_tesseract_data([
+        ("Alice", 95, 100, 100, 50, 15, 5),
+        ("Smith", 90, 160, 100, 50, 15, 5),
+    ])
+
+    with patch("pytesseract.image_to_data", return_value=mock_data):
+        result = ocr_page(page, page_num=0, dpi=DEFAULT_DPI)
+
+    assert isinstance(result, OcrPageResult)
+    assert len(result.words) == 2
+    assert result.words[0].text == "Alice"
+    assert result.words[1].text == "Smith"
+    assert result.low_conf_count == 0
+
+
+def test_ocr_page_dpi_scale_applied() -> None:
+    """Pixel coords are scaled by 72/dpi to PDF points."""
+    doc = _make_image_pdf()
+    page = doc[0]
+    dpi = 300
+    scale = 72.0 / dpi  # 0.24
+
+    mock_data = _mock_tesseract_data([
+        ("Test", 95, 100, 200, 60, 20, 5),
+    ])
+
+    with patch("pytesseract.image_to_data", return_value=mock_data):
+        result = ocr_page(page, page_num=0, dpi=dpi)
+
+    assert len(result.words) == 1
+    x0, y0, x1, y1 = result.words[0].bbox
+    assert abs(x0 - 100 * scale) < 0.01
+    assert abs(y0 - 200 * scale) < 0.01
+    assert abs(x1 - (100 + 60) * scale) < 0.01
+    assert abs(y1 - (200 + 20) * scale) < 0.01
+
+
+def test_ocr_page_low_conf_words_skipped() -> None:
+    """Words below CONF_THRESHOLD are counted but not returned."""
+    doc = _make_image_pdf()
+    page = doc[0]
+
+    mock_data = _mock_tesseract_data([
+        ("Good", 95, 10, 10, 30, 12, 5),
+        ("Bad", CONF_THRESHOLD - 1, 50, 10, 30, 12, 5),
+    ])
+
+    with patch("pytesseract.image_to_data", return_value=mock_data):
+        result = ocr_page(page, page_num=0)
+
+    assert len(result.words) == 1
+    assert result.words[0].text == "Good"
+    assert result.low_conf_count == 1
+
+
+def test_ocr_page_oversized_bbox_rejected() -> None:
+    """A word bbox covering >30% of page area is rejected."""
+    doc = _make_image_pdf()
+    page = doc[0]
+    # page is 612×792 pt; at 300 DPI that's 2550×3300 px
+    # A word covering 50% of the image in pixels → >30% of page area
+    mock_data = _mock_tesseract_data([
+        ("HUGE", 95, 0, 0, 2550, 1650, 5),  # 50% of page height
+    ])
+
+    with patch("pytesseract.image_to_data", return_value=mock_data):
+        result = ocr_page(page, page_num=0)
+
+    assert len(result.words) == 0
+
+
+def test_ocr_page_empty_text_skipped() -> None:
+    """Empty/whitespace text entries are ignored."""
+    doc = _make_image_pdf()
+    page = doc[0]
+
+    mock_data = _mock_tesseract_data([
+        ("", 95, 10, 10, 30, 12, 5),
+        ("  ", 95, 50, 10, 30, 12, 5),
+        ("Real", 95, 90, 10, 30, 12, 5),
+    ])
+
+    with patch("pytesseract.image_to_data", return_value=mock_data):
+        result = ocr_page(page, page_num=0)
+
+    assert len(result.words) == 1
+    assert result.words[0].text == "Real"
+
+
+def test_paint_ocr_redactions_paints_matching_words() -> None:
+    """paint_ocr_redactions draws rects for matching PII words."""
+    doc = _make_image_pdf()
+    page = doc[0]
+
+    words = [
+        OcrWord(page_num=0, text="Alice", bbox=(10.0, 10.0, 50.0, 25.0), conf=95),
+        OcrWord(page_num=0, text="Smith", bbox=(60.0, 10.0, 100.0, 25.0), conf=95),
+        OcrWord(page_num=0, text="Invoice", bbox=(10.0, 40.0, 80.0, 55.0), conf=95),
+    ]
+
+    count = paint_ocr_redactions(page, words, {"Alice", "Smith"})
+    assert count == 2
+
+
+def test_paint_ocr_redactions_case_insensitive() -> None:
+    """Matching is case-insensitive."""
+    doc = _make_image_pdf()
+    page = doc[0]
+
+    words = [OcrWord(page_num=0, text="ALICE", bbox=(10.0, 10.0, 50.0, 25.0), conf=95)]
+    count = paint_ocr_redactions(page, words, {"alice"})
+    assert count == 1
+
+
+def test_paint_ocr_redactions_no_match_returns_zero() -> None:
+    doc = _make_image_pdf()
+    page = doc[0]
+
+    words = [OcrWord(page_num=0, text="Invoice", bbox=(10.0, 10.0, 80.0, 25.0), conf=95)]
+    count = paint_ocr_redactions(page, words, {"Alice"})
+    assert count == 0

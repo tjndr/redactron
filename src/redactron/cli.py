@@ -123,6 +123,7 @@ def run(
             json_output=json_output,
             subject_id=subject,
             write_reports=not no_report,
+            ocr_enabled=ocr,
         )
     except RedactronError as exc:
         _error(str(exc), debug=debug, exc=exc)
@@ -139,6 +140,7 @@ def _run_pipeline(
     json_output: bool,
     subject_id: str = "",
     write_reports: bool = True,
+    ocr_enabled: bool = False,
 ) -> None:
     """Orchestrate extract → detect → redact → verify for one or more PDFs."""
     from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
@@ -172,6 +174,7 @@ def _run_pipeline(
                 score_threshold=threshold,
                 verify=verify,
                 write_reports=write_reports,
+                ocr_enabled=ocr_enabled,
             )
 
             r: dict[str, object] = {
