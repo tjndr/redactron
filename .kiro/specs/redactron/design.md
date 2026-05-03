@@ -308,3 +308,28 @@ directly into the page content stream.
 `--ocr` / `--no-ocr` on the `run` command.  Default: `--no-ocr` (auto-detect
 still raises `NoTextLayerError` for fully image-only PDFs without the flag).
 
+
+## Release flow (BLD-22)
+
+### Workflow: `.github/workflows/release.yml`
+
+Triggered on tag push matching `v*.*.*`.
+
+- **Build smoke test** — runs `uv build` on every push to `main` (no publish).
+  Catches packaging regressions before any tag is pushed.
+- **rc tags** (`v*.*.*-rc.*`) → publish to TestPyPI via PyPA trusted publishing (OIDC).
+- **Release tags** (`v*.*.*`) → publish to PyPI via PyPA trusted publishing (OIDC).
+
+No API tokens stored in GitHub secrets. Authentication is via GitHub OIDC
+(`id-token: write` permission) and PyPI's trusted publisher configuration.
+
+### Version bump procedure
+
+1. Edit `pyproject.toml` version field.
+2. Update `CHANGELOG.md` — move `[Unreleased]` items to new version section.
+3. Commit, push to main.
+4. Push rc tag → verify TestPyPI install.
+5. Push release tag → PyPI publishes automatically.
+
+See `docs/RELEASING.md` for the full step-by-step.
+
