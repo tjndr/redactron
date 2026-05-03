@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fitz
+import pytest as _pytest
 
 from redactron.profile import AccountNumber, DetectionConfig, Profile, Subject
 from redactron.redact.partial import (
@@ -214,8 +215,6 @@ def test_detect_multipage_pdf() -> None:
 
 
 # --- Account number multi-line test (STEP 3) ---
-
-import pytest as _pytest
 
 
 @_pytest.mark.skip(

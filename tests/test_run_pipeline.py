@@ -23,7 +23,6 @@ from redactron.extract.text_layer import TextLayer
 from redactron.pipeline import run_pipeline
 from redactron.profile import DetectionConfig, Profile, Subject
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

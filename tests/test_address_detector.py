@@ -237,7 +237,9 @@ def test_partial_zip_numbers_not_redacted() -> None:
     partial_zips = ["91", "325", "9132", "1325", "19325"]
     layers = [_layer(v) for v in partial_zips]
     result = detect_addresses(layers, _over_redact_profile())
-    assert result == [], f"Partial ZIP substrings should not be redacted: {[d.text for d in result]}"
+    assert result == [], (
+        f"Partial ZIP substrings should not be redacted: {[d.text for d in result]}"
+    )
 
 
 # --- Multi-line address bridging tests (BLD-30 multi-line fix) ---
@@ -251,7 +253,11 @@ _ML_PROFILE = Profile(
 def _ml_layers(*texts: str, page: int = 0) -> list[TextLayer]:
     """Create sequential layers on the same page, incrementing y per line."""
     return [
-        TextLayer(page_num=page, text=t, bbox=(72.0, 100.0 + i * 14.0, 400.0, 112.0 + i * 14.0), block_type=0)
+        TextLayer(
+            page_num=page, text=t,
+            bbox=(72.0, 100.0 + i * 14.0, 400.0, 112.0 + i * 14.0),
+            block_type=0,
+        )
         for i, t in enumerate(texts)
     ]
 

@@ -27,3 +27,11 @@ class VerificationError(RedactronError):
 
 class NoTextLayerError(RedactronError):
     """Raised when a PDF has no extractable text layer (likely a scan)."""
+
+
+class VaultError(RedactronError):
+    """Raised on any vault crypto or format failure."""
+
+
+class SecurityError(RedactronError):
+    """Raised when a security invariant is violated (e.g. loose file permissions)."""
