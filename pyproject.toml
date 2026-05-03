@@ -9,6 +9,23 @@ description = "Local-only CLI for batch PII redaction in PDFs"
 readme = "README.md"
 license = { text = "AGPL-3.0-only" }
 requires-python = ">=3.11"
+keywords = ["pdf", "redaction", "pii", "privacy", "gdpr", "hipaa"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Legal Industry",
+    "Intended Audience :: Healthcare Industry",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business",
+    "Topic :: Security",
+    "Topic :: Utilities",
+]
 dependencies = [
     "pymupdf==1.24.11",
     "presidio-analyzer==2.2.355",
@@ -24,6 +41,12 @@ dependencies = [
     "cryptography==43.0.3",
     "keyring==25.5.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/tjndr/redactron"
+Source = "https://github.com/tjndr/redactron"
+Issues = "https://github.com/tjndr/redactron/issues"
+Changelog = "https://github.com/tjndr/redactron/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 ui = [
