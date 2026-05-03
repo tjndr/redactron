@@ -18,7 +18,7 @@ class AccountNumber(BaseModel):
     """A single account number with optional last-N preservation."""
 
     value: str
-    preserve_last: Annotated[int, Field(ge=1, le=16)] = 4
+    preserve_last: Annotated[int, Field(ge=0, le=16)] = 4
 
 
 class CustomPattern(BaseModel):
