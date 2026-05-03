@@ -63,22 +63,15 @@ class Subject(BaseModel):
 class DetectionConfig(BaseModel):
     """Detection settings."""
 
-    use_presidio: bool = True
-    presidio_entities: list[str] = Field(
-        default_factory=lambda: [
-            "PERSON",
-            "LOCATION",
-            "PHONE_NUMBER",
-            "EMAIL_ADDRESS",
-            "US_SSN",
-            "CREDIT_CARD",
-            "DATE_TIME",
-        ]
-    )
+    use_presidio: bool = False  # profile-only by default
+    presidio_entities: list[str] = Field(default_factory=list)
     fuzzy_match: bool = True
     match_threshold: Annotated[float, Field(ge=0.0, le=1.0)] = 0.85
     full_token_min_length: Annotated[int, Field(ge=1)] = 2
     ocr_fallback: bool = False
+    column_aware: bool = True   # reject cross-column address bridging
+    scan_figures: bool = False  # skip text inside figure/drawing regions
+    address_line_bridge_window: Annotated[int, Field(ge=0, le=10)] = 3
 
 
 class Profile(BaseModel):
@@ -99,11 +92,13 @@ class Profile(BaseModel):
         return self
 
 
-def load_profile(path: Path) -> Profile:
+def load_profile(path: Path | str) -> Profile:
     """Load and validate a profile YAML file.
 
+    Accepts both Path and str arguments.
+
     Args:
-        path: Path to the profile.yaml file.
+        path: Path to the profile.yaml file (str or Path).
 
     Returns:
         Validated Profile instance.
@@ -111,8 +106,12 @@ def load_profile(path: Path) -> Profile:
     Raises:
         ProfileValidationError: If the file is missing, invalid YAML, or fails schema validation.
     """
+    path = Path(path)
     if not path.exists():
-        raise ProfileValidationError(f"Profile not found: {path}")
+        raise ProfileValidationError(
+            f"Profile not found: {path}\n"
+            "Run `redactron init` to create a default profile."
+        )
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:

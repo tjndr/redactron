@@ -53,13 +53,10 @@ def test_redact_no_detections_preserves_text() -> None:
 def test_redacted_text_not_recoverable() -> None:
     """Core verification: redacted text must not appear in re-extracted layers."""
     doc = _make_pdf("Tejinder Singh")
-    # Get the actual bbox from extraction
     layers = extract_text_layers(doc)
     assert len(layers) > 0
-    # Use the full page bbox to ensure we cover the text
-    page = doc[0]
-    full_bbox = (0.0, 0.0, float(page.rect.width), float(page.rect.height))
-    det = _detection("Tejinder Singh", bbox=full_bbox)
+    # Use the actual text bbox (not full page) to avoid triggering sanity guard
+    det = _detection("Tejinder Singh", bbox=layers[0].bbox)
 
     result = redact(doc, [det])
     result_layers = extract_text_layers(result)

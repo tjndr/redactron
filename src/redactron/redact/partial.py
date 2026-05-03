@@ -14,37 +14,31 @@ import fitz  # PyMuPDF
 from redactron.detect.presidio_detector import Detection
 from redactron.profile import AccountNumber, Profile
 
-# Matches digit sequences with optional separators (hyphens, spaces, dots)
-_DIGIT_SEP_RE = re.compile(r"[\d][\d\s\-\.]*[\d]")
+# Matches alphanumeric sequences with optional separators (hyphens, spaces, dots)
+_DIGIT_SEP_RE = re.compile(r"[\w][\w\s\-\.]*[\w]")
 
 
 def _digits_only(value: str) -> str:
-    """Strip all non-digit characters from an account number string."""
-    return re.sub(r"\D", "", value)
+    """Strip all non-alphanumeric characters from an account number string."""
+    return re.sub(r"[^A-Za-z0-9]", "", value)
 
 
 def _find_account_in_text(text: str, account: AccountNumber) -> list[tuple[int, int]]:
     """Return (start, end) char offsets of account number matches in text.
 
     Matches the account number with or without separators (hyphens/spaces).
-    The digits must match exactly; separators in the text are ignored.
-
-    Args:
-        text: The text span to search.
-        account: The account number to find.
-
-    Returns:
-        List of (start, end) offsets in *text* for each match.
+    Alphanumeric characters must match exactly; separators are ignored.
     """
-    target_digits = _digits_only(account.value)
-    if not target_digits:
+    target = _digits_only(account.value)
+    if not target:
         return []
 
+    # Build a regex that matches the account value with optional separators between chars
+    sep = r"[\s\-\.]*"
+    pattern = sep.join(re.escape(c) for c in target)
     matches: list[tuple[int, int]] = []
-    for m in _DIGIT_SEP_RE.finditer(text):
-        span_text = m.group()
-        if _digits_only(span_text) == target_digits:
-            matches.append((m.start(), m.end()))
+    for m in re.finditer(pattern, text, re.IGNORECASE):
+        matches.append((m.start(), m.end()))
     return matches
 
 
