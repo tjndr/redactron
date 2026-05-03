@@ -68,6 +68,7 @@ def run(
     ocr: bool = typer.Option(False, "--ocr", help="Enable OCR fallback for image pages."),
     no_verify: bool = typer.Option(False, "--no-verify", help="Skip post-redaction verification."),
     json_output: bool = typer.Option(False, "--json", help="Output results as JSON."),
+    subject: str = typer.Option("", "--subject", "-s", help="Subject slug for audit tagging."),
     debug: bool = typer.Option(False, "--debug", help="Show full stack traces on error."),
 ) -> None:
     """Redact PII from a PDF file or directory of PDFs."""
@@ -102,6 +103,7 @@ def run(
             threshold=threshold,
             verify=not no_verify,
             json_output=json_output,
+            subject_id=subject,
         )
     except RedactronError as exc:
         _error(str(exc), debug=debug, exc=exc)
@@ -116,6 +118,7 @@ def _run_pipeline(
     threshold: float,
     verify: bool,
     json_output: bool,
+    subject_id: str = "",
 ) -> None:
     """Orchestrate extract → detect → redact → verify for one or more PDFs."""
     from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
@@ -154,6 +157,7 @@ def _run_pipeline(
                 "input": str(result.input_path),
                 "output": str(result.output_path),
                 "detections": len(result.detections),
+                "subject": subject_id or None,
                 "verification": None,
             }
             if result.verification_passed is not None:
@@ -220,6 +224,57 @@ detection:
   full_token_min_length: 2
   ocr_fallback: false
 """
+
+# ---------------------------------------------------------------------------
+# subject subcommand group
+# ---------------------------------------------------------------------------
+
+subject_app = typer.Typer(name="subject", help="Manage redaction subjects.")
+app.add_typer(subject_app)
+
+
+@subject_app.command("add")
+def subject_add(
+    subject_id: str = typer.Argument(..., help="Subject slug (e.g. 'alice-smith')."),
+    display_name: str = typer.Option("", "--name", "-n", help="Display name."),
+) -> None:
+    """Create or update a subject entry in the audit log."""
+    from redactron.audit.log import add_subject
+
+    name = display_name or subject_id
+    add_subject(subject_id, name)
+    typer.echo(f"Subject '{subject_id}' ({name}) saved.")
+
+
+@subject_app.command("list")
+def subject_list() -> None:
+    """List all subjects in the audit log."""
+    from redactron.audit.log import list_subjects
+
+    subjects = list_subjects()
+    if not subjects:
+        typer.echo("No subjects found. Use `redactron subject add <id>` to create one.")
+        return
+    for s in subjects:
+        typer.echo(f"{s['id']:20s}  {s['display_name']:30s}  docs={s['document_count']}")
+
+
+@subject_app.command("show")
+def subject_show(
+    subject_id: str = typer.Argument(..., help="Subject slug."),
+) -> None:
+    """Show details for a specific subject."""
+    from redactron.audit.log import get_subject
+
+    s = get_subject(subject_id)
+    if s is None:
+        typer.echo(f"Subject '{subject_id}' not found.", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"ID:             {s['id']}")
+    typer.echo(f"Display name:   {s['display_name']}")
+    typer.echo(f"Created:        {s['created_at']}")
+    typer.echo(f"Last used:      {s['last_used_at']}")
+    typer.echo(f"Document count: {s['document_count']}")
 
 
 if __name__ == "__main__":
