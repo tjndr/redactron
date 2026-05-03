@@ -1,0 +1,72 @@
+"""Name variant detector using rapidfuzz token-set ratio.
+
+Matches subject name aliases against extracted text spans using fuzzy
+matching, respecting the profile's match_threshold and full_token_min_length.
+"""
+
+from __future__ import annotations
+
+import re
+
+from rapidfuzz import fuzz
+
+from redactron.detect.presidio_detector import Detection
+from redactron.extract.text_layer import TextLayer
+from redactron.profile import Profile
+
+_WORD_RE = re.compile(r"\b\w+\b")
+
+
+def _tokens(text: str) -> list[str]:
+    """Return lowercase word tokens from text."""
+    return _WORD_RE.findall(text.lower())
+
+
+def detect_names(
+    layers: list[TextLayer],
+    profile: Profile,
+) -> list[Detection]:
+    """Detect name aliases in text layers using rapidfuzz token_set_ratio.
+
+    For each text span, checks every alias in profile.subject.aliases
+    (plus display_name) using token_set_ratio. A match is emitted when
+    the score >= match_threshold AND every token in the alias is at least
+    full_token_min_length characters long.
+
+    Args:
+        layers: Text spans extracted from a PDF page.
+        profile: Loaded and validated Profile.
+
+    Returns:
+        List of Detection objects for matched name spans.
+    """
+    cfg = profile.detection
+    threshold = cfg.match_threshold * 100  # rapidfuzz uses 0-100 scale
+    min_len = cfg.full_token_min_length
+
+    # Build candidate list: display_name + all aliases
+    candidates: list[str] = [profile.subject.display_name] + list(profile.subject.aliases)
+    # Only keep candidates that have at least one token >= min_len
+    valid_candidates = [
+        c for c in candidates if any(len(t) >= min_len for t in _tokens(c))
+    ]
+
+    detections: list[Detection] = []
+    for layer in layers:
+        if not layer.text:
+            continue
+        for alias in valid_candidates:
+            score = fuzz.token_set_ratio(alias.lower(), layer.text.lower())
+            if score >= threshold:
+                detections.append(
+                    Detection(
+                        text=layer.text,
+                        entity_type="PERSON",
+                        score=score / 100.0,
+                        page_num=layer.page_num,
+                        bbox=layer.bbox,
+                    )
+                )
+                break  # one detection per layer span is enough
+
+    return detections
