@@ -238,3 +238,85 @@ def test_partial_zip_numbers_not_redacted() -> None:
     layers = [_layer(v) for v in partial_zips]
     result = detect_addresses(layers, _over_redact_profile())
     assert result == [], f"Partial ZIP substrings should not be redacted: {[d.text for d in result]}"
+
+
+# --- Multi-line address bridging tests (BLD-30 multi-line fix) ---
+
+_ML_PROFILE = Profile(
+    subject=Subject(display_name="Test", addresses=["100 Phillip Street, San Jose, CA 91325, USA"]),
+    detection=DetectionConfig(match_threshold=0.85),
+)
+
+
+def _ml_layers(*texts: str, page: int = 0) -> list[TextLayer]:
+    """Create sequential layers on the same page, incrementing y per line."""
+    return [
+        TextLayer(page_num=page, text=t, bbox=(72.0, 100.0 + i * 14.0, 400.0, 112.0 + i * 14.0), block_type=0)
+        for i, t in enumerate(texts)
+    ]
+
+
+def test_two_line_address_both_lines_redacted() -> None:
+    """Street on line 1, city/state/zip on line 2 — both must be redacted."""
+    layers = _ml_layers("100 Phillip Street", "San Jose, CA 91325")
+    result = detect_addresses(layers, _ml_profile())
+    texts = {d.text for d in result}
+    assert "100 Phillip Street" in texts, f"Street line missing from redactions: {texts}"
+    assert "San Jose, CA 91325" in texts, f"City/state/zip line missing from redactions: {texts}"
+
+
+def _ml_profile() -> Profile:
+    return _ML_PROFILE
+
+
+def test_triple_line_address_all_lines_redacted() -> None:
+    """Street | city,state | zip on separate lines — all three redacted."""
+    layers = _ml_layers("100 Phillip Street", "San Jose, CA", "91325")
+    result = detect_addresses(layers, _ml_profile())
+    texts = {d.text for d in result}
+    assert "100 Phillip Street" in texts, f"Street missing: {texts}"
+    assert "San Jose, CA" in texts, f"City/state missing: {texts}"
+
+
+def test_suite_line_in_middle_all_redacted() -> None:
+    """Street | Suite | city/state/zip — all three redacted."""
+    profile = Profile(
+        subject=Subject(
+            display_name="Test",
+            addresses=["100 Phillip Street Suite 400, San Jose, CA 91325, USA"],
+        ),
+        detection=DetectionConfig(match_threshold=0.85),
+    )
+    layers = _ml_layers("100 Phillip Street", "Suite 400", "San Jose, CA 91325")
+    result = detect_addresses(layers, profile)
+    texts = {d.text for d in result}
+    assert "100 Phillip Street" in texts, f"Street missing: {texts}"
+    assert "San Jose, CA 91325" in texts, f"City/state/zip missing: {texts}"
+
+
+def test_empty_line_between_address_parts_both_redacted() -> None:
+    """Empty line between street and city/state/zip — both non-empty lines redacted."""
+    layers = _ml_layers("100 Phillip Street", "", "San Jose, CA 91325")
+    result = detect_addresses(layers, _ml_profile())
+    texts = {d.text for d in result}
+    assert "100 Phillip Street" in texts, f"Street missing: {texts}"
+    assert "San Jose, CA 91325" in texts, f"City/state/zip missing: {texts}"
+
+
+def test_non_address_line_stops_bridging() -> None:
+    """Non-address content between street and city/state/zip stops bridging.
+
+    Street is redacted; city/state/zip on the far side is NOT redacted
+    because the bridge was broken by prose content. This is an acceptable v1 limitation.
+    """
+    layers = _ml_layers(
+        "100 Phillip Street",
+        "Account Statement for the period ending",
+        "San Jose, CA 91325",
+    )
+    result = detect_addresses(layers, _ml_profile())
+    texts = {d.text for d in result}
+    # City/state/zip must NOT be redacted (bridge broken by prose)
+    assert "San Jose, CA 91325" not in texts, (
+        f"City/state/zip should NOT be redacted when bridge is broken: {texts}"
+    )

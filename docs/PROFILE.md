@@ -109,7 +109,25 @@ detection:
 
 **Known limitation — house number disambiguation:** At the default threshold (0.85), "200 Phillip Street" will match a profile address of "100 Phillip Street" because they differ by only one character (~97% similar). To distinguish house numbers, raise `match_threshold` to 0.99 — but this may miss abbreviated or slightly misspelled forms. This is a v1 limitation; v2 will use structured address comparison.
 
-**Known limitation — cross-page splits:** An address split across a page boundary (last line on page 1, rest on page 2) will not be detected as a single match. Each page's text is processed independently. Workaround: add both the full address and the street-only form as separate profile addresses.
+### Multi-line address handling
+
+Many PDFs render addresses across multiple lines (street on one line, city/state/zip on the next). redactron handles this with **multi-line bridging**:
+
+1. A line that parses as a street address (has a house number + street name) becomes an anchor.
+2. The detector looks forward up to `address_line_bridge_window` (default: 3) subsequent lines for continuation content: city/state/zip lines, occupancy lines (Suite, Apt, Unit), or empty lines.
+3. If a continuation is found, all constituent lines are matched together against the profile address. On a match, **each line gets its own redaction bbox** — no single giant rectangle.
+4. Bridging **stops immediately** if a prose line is encountered (more than 6 tokens with no ZIP or state abbreviation). This prevents bridging across account headers, footnotes, or other non-address content.
+
+Configure the window in your profile:
+
+```yaml
+detection:
+  address_line_bridge_window: 3   # default; increase for very spread-out addresses
+```
+
+**Known limitation:** If a street line and its city/state/zip are separated by a non-address line (e.g., "Account Statement for the period ending"), only the street line is redacted. The city/state/zip on the far side of the prose is not redacted because the bridge was broken. Workaround: add both the full address and the street-only form as separate profile addresses, or use the verifier to flag survivors.
+
+**Known limitation:** Account numbers split across a line break (e.g., `1234-5678-\n9012-3456`) are not detected as a single match in v1. Each half-line is processed independently. This is a v2 backlog item.
 
 ---
 
@@ -165,7 +183,7 @@ Understanding how each field type is matched prevents surprises:
 | Field type | Matching strategy | Why |
 |---|---|---|
 | Names | Whole-string fuzzy (`token_set_ratio`) against full span | Aliases are complete strings, not tokens |
-| Addresses | Span must parse as address first, then `partial_ratio` | Prevents numeric substrings from matching |
+| Addresses | Span must parse as address first, then `partial_ratio` on combined multi-line group | Prevents numeric substrings from matching; handles line breaks |
 | Account numbers | Exact digit match (separators stripped) | Fuzzy on digits causes catastrophic over-redaction |
 | Custom patterns | Regex with `re.finditer` | Exact by definition |
 
