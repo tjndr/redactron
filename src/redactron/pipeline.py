@@ -197,7 +197,12 @@ def run_pipeline(
 
     if verify:
         from redactron.verify.verifier import verify_redaction
-        vr = verify_redaction(working_doc, all_detections)
+        vr = verify_redaction(
+            working_doc,
+            profile,
+            original_detections=all_detections,
+            score_threshold=score_threshold,
+        )
         result.verification_passed = vr.passed
         result.survivors = len(vr.survivors)
 
