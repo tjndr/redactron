@@ -74,34 +74,38 @@ def run(
     subject: str = typer.Option("", "--subject", "-s", help="Subject slug for audit tagging."),
     no_report: bool = typer.Option(False, "--no-report", help="Skip writing report files."),
     debug: bool = typer.Option(False, "--debug", help="Show full stack traces on error."),
+    client: str = typer.Option("", "--client", "-c", help="Load profile from vault by client ID."),
 ) -> None:
     """Redact PII from a PDF file or directory of PDFs."""
     from redactron.profile import load_profile
 
-    profile_path = Path(profile) if profile else default_profile_path()
-    vault_path = _default_vault_path()
+    if client:
+        loaded_profile = _load_profile_for_client(client)
+    else:
+        profile_path = Path(profile) if profile else default_profile_path()
+        vault_path = _default_vault_path()
 
-    # Backwards-compat: if vault exists and no explicit --profile, warn
-    if not profile and vault_path.exists() and profile_path.exists():
-        typer.echo(
-            "⚠️  Deprecation: both profile.yaml and vault.enc found. "
-            "Using profile.yaml. Migrate with: redactron profile import profile.yaml",
-            err=True,
-        )
+        # Backwards-compat: if vault exists and no explicit --profile, warn
+        if not profile and vault_path.exists() and profile_path.exists():
+            typer.echo(
+                "⚠️  Deprecation: both profile.yaml and vault.enc found. "
+                "Using profile.yaml. Migrate with: redactron profile import profile.yaml",
+                err=True,
+            )
 
-    try:
-        loaded_profile = load_profile(profile_path)
-    except ProfileValidationError as exc:
-        msg = str(exc)
-        typer.echo(
-            f"❌ Profile error: {msg}\n"
-            "See docs/PROFILE.md for the full schema. Use --debug for details.",
-            err=True,
-        )
-        if debug:
-            import traceback
-            traceback.print_exc()
-        raise typer.Exit(1) from exc
+        try:
+            loaded_profile = load_profile(profile_path)
+        except ProfileValidationError as exc:
+            msg = str(exc)
+            typer.echo(
+                f"❌ Profile error: {msg}\n"
+                "See docs/PROFILE.md for the full schema. Use --debug for details.",
+                err=True,
+            )
+            if debug:
+                import traceback
+                traceback.print_exc()
+            raise typer.Exit(1) from exc
 
     log.info(
         "Loaded profile: %s (subject: %s)",
@@ -548,6 +552,21 @@ def _get_vault_store() -> VaultStore:  # noqa: F821
     from redactron.vault.store import VaultStore
 
     return VaultStore(_default_vault_path(), get_keychain_backend())
+
+
+def _load_profile_for_client(client_id: str) -> Profile:
+    """Load a Profile from the vault for the given client_id."""
+    store = _get_vault_store()
+    profile_dict = store.get_profile(client_id)
+    if profile_dict is None:
+        metas = store.list_profiles()
+        available = ", ".join(m.client_id for m in metas) or "(none)"
+        typer.echo(
+            f"Error: client '{client_id}' not found in vault. Available: {available}",
+            err=True,
+        )
+        raise typer.Exit(1)
+    return Profile.model_validate(profile_dict)
 
 
 @vault_app.command("init")
