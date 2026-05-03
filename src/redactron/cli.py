@@ -1,6 +1,9 @@
 """redactron CLI — orchestration only, no business logic."""
 
+from __future__ import annotations
+
 import json as json_mod
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -8,7 +11,10 @@ import typer
 
 from redactron import __version__
 from redactron.config import default_profile_path
-from redactron.errors import RedactronError
+from redactron.errors import ProfileValidationError, RedactronError
+from redactron.profile import Profile
+
+log = logging.getLogger(__name__)
 
 app = typer.Typer(
     name="redactron",
@@ -65,13 +71,35 @@ def run(
     debug: bool = typer.Option(False, "--debug", help="Show full stack traces on error."),
 ) -> None:
     """Redact PII from a PDF file or directory of PDFs."""
+    from redactron.profile import load_profile
+
+    profile_path = Path(profile) if profile else default_profile_path()
+    try:
+        loaded_profile = load_profile(profile_path)
+    except ProfileValidationError as exc:
+        msg = str(exc)
+        typer.echo(
+            f"❌ Profile error: {msg}\n"
+            "See docs/PROFILE.md for the full schema. Use --debug for details.",
+            err=True,
+        )
+        if debug:
+            import traceback
+            traceback.print_exc()
+        raise typer.Exit(1) from exc
+
+    log.info(
+        "Loaded profile: %s (subject: %s)",
+        loaded_profile.name,
+        loaded_profile.subject.display_name,
+    )
+
     try:
         _run_pipeline(
             path=path,
-            profile_path=Path(profile) if profile else default_profile_path(),
+            profile=loaded_profile,
             output=Path(output) if output else None,
             threshold=threshold,
-            ocr=ocr,
             verify=not no_verify,
             json_output=json_output,
         )
@@ -83,19 +111,16 @@ def run(
 
 def _run_pipeline(
     path: Path,
-    profile_path: Path,
+    profile: Profile,
     output: Optional[Path],
     threshold: float,
-    ocr: bool,
     verify: bool,
     json_output: bool,
 ) -> None:
     """Orchestrate extract → detect → redact → verify for one or more PDFs."""
     from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
 
-    from redactron.detect.presidio_detector import detect
-    from redactron.extract.text_layer import extract_text_layers, open_pdf
-    from redactron.redact.engine import redact, save_redacted
+    from redactron.pipeline import run_pipeline
 
     pdfs = _collect_pdfs(path)
     if not pdfs:
@@ -117,30 +142,32 @@ def _run_pipeline(
         for pdf_path in pdfs:
             progress.update(task, description=f"[cyan]{pdf_path.name}[/cyan]")
             out_path = _output_path(pdf_path, output, batch)
-            doc = open_pdf(pdf_path)
-            layers = extract_text_layers(doc)
-            detections = detect(layers, score_threshold=threshold)
-            redacted_doc = redact(doc, detections)
-            save_redacted(redacted_doc, out_path)
+            result = run_pipeline(
+                pdf_path,
+                out_path,
+                profile,
+                score_threshold=threshold,
+                verify=verify,
+            )
 
-            result: dict[str, object] = {
-                "input": str(pdf_path),
-                "output": str(out_path),
-                "detections": len(detections),
+            r: dict[str, object] = {
+                "input": str(result.input_path),
+                "output": str(result.output_path),
+                "detections": len(result.detections),
                 "verification": None,
             }
-
-            if verify:
-                from redactron.verify.verifier import verify_redaction
-                vr = verify_redaction(redacted_doc, detections)
-                result["verification"] = {"passed": vr.passed, "survivors": len(vr.survivors)}
-                if not vr.passed:
+            if result.verification_passed is not None:
+                r["verification"] = {
+                    "passed": result.verification_passed,
+                    "survivors": result.survivors,
+                }
+                if not result.verification_passed:
                     progress.print(
-                        f"WARNING: {len(vr.survivors)} PII item(s) survived "
+                        f"WARNING: {result.survivors} PII item(s) survived "
                         f"redaction in {pdf_path.name}",
                     )
 
-            results.append(result)
+            results.append(r)
             progress.advance(task)
 
     if json_output:
@@ -186,15 +213,8 @@ subject:
   account_numbers: []
   custom_patterns: []
 detection:
-  use_presidio: true
-  presidio_entities:
-    - PERSON
-    - LOCATION
-    - PHONE_NUMBER
-    - EMAIL_ADDRESS
-    - US_SSN
-    - CREDIT_CARD
-    - DATE_TIME
+  use_presidio: false
+  presidio_entities: []
   fuzzy_match: true
   match_threshold: 0.85
   full_token_min_length: 2

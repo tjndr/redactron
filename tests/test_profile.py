@@ -70,7 +70,7 @@ def test_load_minimal_profile(tmp_path: Path) -> None:
     p.write_text("version: 1\nsubject:\n  display_name: Alice\n")
     profile = load_profile(p)
     assert profile.subject.display_name == "Alice"
-    assert profile.detection.use_presidio is True  # default
+    assert profile.detection.use_presidio is False  # default is profile-only mode
 
 
 def test_missing_file_raises(tmp_path: Path) -> None:
@@ -141,3 +141,38 @@ def test_non_mapping_yaml_raises(tmp_path: Path) -> None:
     p.write_text("- item1\n- item2\n")
     with pytest.raises(ProfileValidationError, match="mapping"):
         load_profile(p)
+
+
+# --- STEP 4a regression tests (BLD-30) ---
+
+def test_load_profile_accepts_str_path(tmp_path: Path) -> None:
+    """load_profile accepts a str argument (regression for BLD-30 bug)."""
+    p = tmp_path / "profile.yaml"
+    p.write_text("version: 1\nsubject:\n  display_name: Alice\n")
+    profile = load_profile(str(p))  # str, not Path
+    assert profile.subject.display_name == "Alice"
+
+
+def test_missing_profile_friendly_message(tmp_path: Path) -> None:
+    """Missing profile file gives a friendly message mentioning redactron init."""
+    with pytest.raises(ProfileValidationError, match="redactron init"):
+        load_profile(tmp_path / "nonexistent.yaml")
+
+
+def test_malformed_custom_patterns_friendly_error(tmp_path: Path) -> None:
+    """Malformed custom_patterns raises ProfileValidationError, not raw pydantic error."""
+    p = tmp_path / "profile.yaml"
+    p.write_text(
+        "version: 1\nsubject:\n  display_name: Test\n  custom_patterns:\n"
+        "    - name: bad\n      regex: '[unclosed'\n"
+    )
+    with pytest.raises(ProfileValidationError, match="validation failed"):
+        load_profile(p)
+
+
+def test_presidio_false_by_default() -> None:
+    """DetectionConfig defaults to use_presidio=False (profile-only mode)."""
+    from redactron.profile import DetectionConfig
+    cfg = DetectionConfig()
+    assert cfg.use_presidio is False
+    assert cfg.presidio_entities == []
