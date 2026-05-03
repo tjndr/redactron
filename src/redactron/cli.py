@@ -91,6 +91,8 @@ def _run_pipeline(
     json_output: bool,
 ) -> None:
     """Orchestrate extract → detect → redact → verify for one or more PDFs."""
+    from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
+
     from redactron.detect.presidio_detector import detect
     from redactron.extract.text_layer import extract_text_layers, open_pdf
     from redactron.redact.engine import redact, save_redacted
@@ -100,34 +102,46 @@ def _run_pipeline(
         typer.echo("No PDF files found.", err=True)
         raise typer.Exit(1)
 
+    batch = len(pdfs) > 1
     results = []
-    for pdf_path in pdfs:
-        out_path = _output_path(pdf_path, output, len(pdfs) > 1)
-        doc = open_pdf(pdf_path)
-        layers = extract_text_layers(doc)
-        detections = detect(layers, score_threshold=threshold)
-        redacted_doc = redact(doc, detections)
-        save_redacted(redacted_doc, out_path)
 
-        result: dict[str, object] = {
-            "input": str(pdf_path),
-            "output": str(out_path),
-            "detections": len(detections),
-            "verification": None,
-        }
+    progress = Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        transient=True,
+        disable=not batch or json_output,
+    )
+    with progress:
+        task = progress.add_task("Redacting…", total=len(pdfs))
+        for pdf_path in pdfs:
+            progress.update(task, description=f"[cyan]{pdf_path.name}[/cyan]")
+            out_path = _output_path(pdf_path, output, batch)
+            doc = open_pdf(pdf_path)
+            layers = extract_text_layers(doc)
+            detections = detect(layers, score_threshold=threshold)
+            redacted_doc = redact(doc, detections)
+            save_redacted(redacted_doc, out_path)
 
-        if verify:
-            from redactron.verify.verifier import verify_redaction
-            vr = verify_redaction(redacted_doc, detections)
-            result["verification"] = {"passed": vr.passed, "survivors": len(vr.survivors)}
-            if not vr.passed:
-                typer.echo(
-                    f"WARNING: {len(vr.survivors)} PII item(s) survived "
-                    f"redaction in {pdf_path.name}",
-                    err=True,
-                )
+            result: dict[str, object] = {
+                "input": str(pdf_path),
+                "output": str(out_path),
+                "detections": len(detections),
+                "verification": None,
+            }
 
-        results.append(result)
+            if verify:
+                from redactron.verify.verifier import verify_redaction
+                vr = verify_redaction(redacted_doc, detections)
+                result["verification"] = {"passed": vr.passed, "survivors": len(vr.survivors)}
+                if not vr.passed:
+                    progress.print(
+                        f"WARNING: {len(vr.survivors)} PII item(s) survived "
+                        f"redaction in {pdf_path.name}",
+                    )
+
+            results.append(result)
+            progress.advance(task)
 
     if json_output:
         typer.echo(json_mod.dumps(results, indent=2))
