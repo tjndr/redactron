@@ -146,10 +146,13 @@ Your first job is to bootstrap the project end-to-end.
     - "Blocked / needs review" — anything Blocked or PR-pending
     - "By model" — grouped by sonnet/haiku label (for credit budget tracking)
 
-5h. CREDIT USAGE TRACKING (mandatory after every completed task):
-    Source: parse Kiro's auto-emitted task summary line (format like
-    "✓ Task complete — N credits used — Xm Ys"). Do NOT use /usage or
-    kiro-cli usage commands; they don't expose data programmatically.
+5h. CREDIT USAGE TRACKING (mandatory after every PR opens):
+    Run scripts/log-credits.sh immediately after opening each PR:
+        bash scripts/log-credits.sh <issue-id> <delta> <duration_seconds> [model] [pr-url]
+    Do NOT parse chat output or use /usage commands. The script reads
+    .redactron/credits.db for the running total, inserts the new row,
+    prints the Linear comment text, and fires a credit alert if >= 800.
+    Estimate delta from the task complexity if an exact count is unavailable.
 
 6. Run `uv init` and create pyproject.toml with the locked stack from tech.md
    (Python 3.11, PyMuPDF, presidio-analyzer, presidio-anonymizer, rapidfuzz,
@@ -170,12 +173,24 @@ Do NOT start implementation tasks (M1.3 onward) until I explicitly confirm.
 
 For every subsequent task:
   - Move the Linear issue to "In Progress"
-  - Create branch <phase>/<linear-id>-short-desc (e.g. m1/red-3-text-extraction)
+  - Create branch <phase>/<linear-id>-short-desc (e.g. m2/bld-7-profile-schema)
   - Implement, write tests, run: uv run pytest && uv run ruff check && uv run mypy src/
   - Only when all three pass: commit (conventional commit), push, open PR closing
-    the Linear issue ("Closes RED-N" in PR body)
-  - Capture Kiro's task summary line and execute the credit tracking workflow (5h)
-  - Wait for me to review and merge before starting the next task
+    the Linear issue ("Closes BLD-N" in PR body)
+  - Immediately enable auto-merge with squash:
+        gh pr merge --auto --squash --delete-branch
+    GitHub will auto-merge as soon as all 4 CI checks pass and delete the branch.
+  - EXCEPTIONS — do NOT enable auto-merge for these issues; open the PR and stop,
+    wait for my explicit "merge it" approval before continuing to the next task:
+        - BLD-10 (M2.4 partial redaction with last-4 bbox math)
+        - BLD-13 (M3.1 verifier module)
+        - BLD-19 (M4.1 OCR fallback / image-region painting)
+  - Capture your task summary line and execute the credit tracking workflow (5h)
+  - For non-exception tasks:
+        a. Proceed to the next task immediately without waiting for auto-merge
+           to complete. GitHub will handle it asynchronously.
+        b. After picking up the next task, trust GitHub's auto-merge + the on-pr-merge hook to handle Linear state. Only spot-check at the end of each milestone.
+  - For exception tasks: STOP and wait for my approval before continuing.
 
 Use Claude Sonnet 4.6 by default. Switch to Claude Haiku 4.5 only when I prefix
 a message with /model haiku.
