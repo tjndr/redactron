@@ -118,10 +118,12 @@ def _is_address_continuation(text: str) -> bool:
 
     # Has a ZIP code (strict: not preceded by # or reference markers)
     if _ZIP_RE.search(stripped):
-        # Extra check: must also have a state OR city-like token to be a real address line
+        # Extra check: must also have a state OR city-like token to be a real address line,
+        # OR be a standalone ZIP/ZIP+4 (just digits and hyphen)
         has_state = any(t.rstrip(",") in _US_STATES for t in tokens_upper)
+        is_standalone_zip = bool(re.fullmatch(r"\d{5}(?:-\d{4})?", stripped))
         has_city_pattern = len(tokens_upper) >= 2 and not stripped[0].isdigit()
-        if has_state or has_city_pattern:
+        if has_state or has_city_pattern or is_standalone_zip:
             return True
 
     # Has a US state abbreviation → likely city/state line
