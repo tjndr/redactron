@@ -277,5 +277,27 @@ def subject_show(
     typer.echo(f"Document count: {s['document_count']}")
 
 
+# ---------------------------------------------------------------------------
+# report command
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def report(
+    run_id: int = typer.Argument(..., help="Audit log run ID (from `redactron log`)."),
+) -> None:
+    """Re-render the Markdown report for a past run from the audit log."""
+    from redactron.audit.log import get_runs
+    from redactron.report.markdown import render_from_db
+
+    rows = get_runs(limit=run_id + 100)
+    # rows are newest-first; find by id
+    match = next((r for r in rows if r["id"] == run_id), None)
+    if match is None:
+        typer.echo(f"Run ID {run_id} not found in audit log.", err=True)
+        raise typer.Exit(1)
+    typer.echo(render_from_db(match))
+
+
 if __name__ == "__main__":
     app()
