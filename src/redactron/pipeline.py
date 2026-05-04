@@ -26,6 +26,32 @@ MAX_PASSES = 3
 
 
 @dataclass
+class BatchFileError:
+    """Error record for a single file in a batch run."""
+
+    path: Path
+    category: str   # OCR_REQUIRED | ENCRYPTED | CORRUPT | PERMISSION | UNKNOWN
+    message: str
+    mitigation: str
+
+
+def _categorize_error(exc: BaseException) -> tuple[str, str]:
+    """Return (category, mitigation) for a pipeline exception."""
+    from redactron.errors import ExtractionError, NoTextLayerError
+
+    msg = str(exc)
+    if isinstance(exc, NoTextLayerError):
+        return "OCR_REQUIRED", "Re-run without --no-ocr (OCR is on by default)"
+    if isinstance(exc, ExtractionError):
+        if "encrypted" in msg.lower():
+            return "ENCRYPTED", "Decrypt the PDF first, then re-run"
+        if "permission" in msg.lower() or "access" in msg.lower():
+            return "PERMISSION", "Check file permissions (needs read access)"
+        return "CORRUPT", "File may be corrupt; try re-exporting from source"
+    return "UNKNOWN", "Run with --debug for full stack trace"
+
+
+@dataclass
 class PipelineResult:
     """Result of processing a single PDF."""
 
