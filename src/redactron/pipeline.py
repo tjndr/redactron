@@ -221,7 +221,8 @@ def run_pipeline(
 
     # OCR pass: paint redactions on image-only pages
     if ocr_enabled:
-        _apply_ocr_redactions(working_doc, profile, force=force_ocr)
+        ocr_detections = _apply_ocr_redactions(working_doc, profile, force=force_ocr)
+        all_detections.extend(ocr_detections)
 
     # Save the final working doc
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -295,11 +296,13 @@ def _overlaps_any(
     return False
 
 
-def _apply_ocr_redactions(doc: fitz.Document, profile: Profile, force: bool = False) -> None:
+def _apply_ocr_redactions(
+    doc: fitz.Document, profile: Profile, force: bool = False
+) -> list[Detection]:
     """OCR image-only pages and paint black over PII words.
 
-    Builds a set of PII strings from the profile (display_name, aliases,
-    phones, emails, SSNs) and matches them against OCR word text.
+    Returns synthetic Detection records for each painted region so the
+    detection counter reflects actual OCR redactions.
     """
     from redactron.extract.ocr import ocr_document, paint_ocr_redactions
 
@@ -317,8 +320,21 @@ def _apply_ocr_redactions(doc: fitz.Document, profile: Profile, force: bool = Fa
         pii_texts.add(an.value)
 
     ocr_results = ocr_document(doc, force=force)
+    detections: list[Detection] = []
+    lower_pii = {t.lower() for t in pii_texts}
     for page_result in ocr_results:
         page = doc[page_result.page_num]
         count = paint_ocr_redactions(page, page_result.words, pii_texts)
         if count:
             log.info("OCR page %d: painted %d redaction(s)", page_result.page_num, count)
+        # Append synthetic Detection for each painted word
+        for word in page_result.words:
+            if word.text.lower() in lower_pii:
+                detections.append(Detection(
+                    text=word.text,
+                    entity_type="OCR",
+                    score=word.conf / 100.0,
+                    page_num=word.page_num,
+                    bbox=word.bbox,
+                ))
+    return detections
