@@ -68,7 +68,7 @@ class DetectionConfig(BaseModel):
     fuzzy_match: bool = True
     match_threshold: Annotated[float, Field(ge=0.0, le=1.0)] = 0.85
     full_token_min_length: Annotated[int, Field(ge=1)] = 2
-    ocr_fallback: bool = False
+    ocr_fallback: bool = True
     column_aware: bool = True   # reject cross-column address bridging
     scan_figures: bool = False  # skip text inside figure/drawing regions
     address_line_bridge_window: Annotated[int, Field(ge=0, le=10)] = 3
