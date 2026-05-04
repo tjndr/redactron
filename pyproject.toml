@@ -63,6 +63,9 @@ source = "vcs"
 packages = ["src/redactron"]
 artifacts = ["docs/examples"]
 
+[tool.hatch.build.targets.wheel.shared-data]
+"src/redactron/data" = "redactron/data"
+
 [dependency-groups]
 dev = [
     "pytest==8.3.3",
