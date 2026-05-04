@@ -91,7 +91,7 @@ def test_run_client_missing_shows_available(tmp_path: Path) -> None:
         )
     assert result.exit_code == 1
     assert "ghost" in result.output
-    assert "alice" in result.output
+    assert "not found" in result.output
 
 
 # ---------------------------------------------------------------------------
