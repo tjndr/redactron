@@ -8,6 +8,8 @@ build/
 .ruff_cache/
 .pytest_cache/
 *.db
-!.redactron/.gitkeep
 htmlcov/
 .coverage
+.kiro/
+.redactron/
+scripts/
