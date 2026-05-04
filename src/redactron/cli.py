@@ -36,8 +36,16 @@ def _error(msg: str, debug: bool = False, exc: Optional[BaseException] = None) -
 
 
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context) -> None:
+def main(
+    ctx: typer.Context,
+    version: Optional[bool] = typer.Option(  # noqa: UP007
+        None, "--version", "-V", is_eager=True, help="Show version and exit."
+    ),
+) -> None:
     """redactron — local-only PDF PII redaction."""
+    if version:
+        typer.echo(f"redactron {__version__}")
+        raise typer.Exit()
     if ctx.invoked_subcommand is None:
         typer.echo("Use --help to see available commands.")
 
