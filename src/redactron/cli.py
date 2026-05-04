@@ -216,7 +216,9 @@ def _run_pipeline(
     force_ocr: bool = False,
 ) -> None:
     """Orchestrate extract → detect → redact → verify for one or more PDFs."""
-    from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
+    import time
+
+    from rich.console import Console
 
     from redactron.pipeline import BatchFileError, _categorize_error, run_pipeline
 
@@ -228,95 +230,103 @@ def _run_pipeline(
     batch = len(pdfs) > 1
     results = []
     errors: list[BatchFileError] = []
+    console = Console(highlight=False)
+    err_console = Console(highlight=False, stderr=True)
 
-    progress = Progress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        MofNCompleteColumn(),
-        transient=True,
-        disable=not batch or json_output,
-    )
-    with progress:
-        task = progress.add_task("Redacting…", total=len(pdfs))
-        for pdf_path in pdfs:
-            progress.update(task, description=f"[cyan]{pdf_path.name}[/cyan]")
-            out_path = _output_path(pdf_path, output, batch)
-            try:
-                result = run_pipeline(
-                    pdf_path,
-                    out_path,
-                    profile,
-                    score_threshold=threshold,
-                    verify=verify,
-                    write_reports=write_reports and per_file_reports,
-                    ocr_enabled=ocr_enabled,
-                    force_ocr=force_ocr,
+    for idx, pdf_path in enumerate(pdfs, 1):
+        out_path = _output_path(pdf_path, output, batch)
+        t0 = time.monotonic()
+        try:
+            result = run_pipeline(
+                pdf_path,
+                out_path,
+                profile,
+                score_threshold=threshold,
+                verify=verify,
+                write_reports=write_reports and per_file_reports,
+                ocr_enabled=ocr_enabled,
+                force_ocr=force_ocr,
+            )
+        except Exception as exc:
+            category, mitigation = _categorize_error(exc)
+            errors.append(BatchFileError(
+                path=pdf_path,
+                category=category,
+                message=str(exc).splitlines()[0],
+                mitigation=mitigation,
+            ))
+            log.debug("Error processing %s: %s", pdf_path, exc, exc_info=True)
+            if not json_output:
+                err_console.print(
+                    f"  [red]✗[/red] {pdf_path.name}  "
+                    f"[dim]\\[{category}][/dim] {mitigation}"
                 )
-            except Exception as exc:
-                category, mitigation = _categorize_error(exc)
-                errors.append(BatchFileError(
-                    path=pdf_path,
-                    category=category,
-                    message=str(exc).splitlines()[0],
-                    mitigation=mitigation,
-                ))
-                log.debug("Error processing %s: %s", pdf_path, exc, exc_info=True)
-                progress.advance(task)
-                continue
+            continue
 
-            r: dict[str, object] = {
-                "input": str(result.input_path),
-                "output": str(result.output_path),
-                "detections": len(result.detections),
-                "subject": subject_id or None,
-                "verification": None,
-            }
-            if result.verification_passed is not None:
-                r["verification"] = {
-                    "passed": result.verification_passed,
-                    "survivors": result.survivors,
-                }
-                if not result.verification_passed:
-                    progress.print(
-                        f"WARNING: {result.survivors} PII item(s) survived "
-                        f"redaction in {pdf_path.name}",
-                    )
+        dur = time.monotonic() - t0
+        det = len(result.detections)
+        vf = result.verification_passed
 
-            results.append(r)
-            progress.advance(task)
+        if vf is False:
+            status_icon = "[red]✗[/red]"
+        elif det == 0:
+            status_icon = "[white]⚪[/white]"
+        else:
+            status_icon = "[green]✓[/green]"
+
+        r: dict[str, object] = {
+            "input": str(result.input_path),
+            "output": str(result.output_path),
+            "detections": det,
+            "duration_s": round(dur, 1),
+            "subject": subject_id or None,
+            "verification": None,
+        }
+        if vf is not None:
+            r["verification"] = {"passed": vf, "survivors": result.survivors}
+
+        results.append(r)
+
+        if not json_output:
+            vstr = "" if vf is None else (" [green]✓[/green]" if vf else " [red]✗ survivors[/red]")
+            console.print(
+                f"  {status_icon} [cyan]{pdf_path.name}[/cyan]  "
+                f"{det} detections  {dur:.1f}s{vstr}"
+            )
 
     if json_output:
         typer.echo(json_mod.dumps(results, indent=2))
-    else:
-        for r in results:
-            status = "✓" if r.get("verification") is None or (
-                isinstance(r["verification"], dict) and r["verification"]["passed"]
-            ) else "✗"
-            typer.echo(f"{status} {r['input']} → {r['output']} ({r['detections']} detections)")
+        return
 
-        if errors:
-            typer.echo(f"\n⚠️  {len(errors)} file(s) failed:", err=True)
-            for e in errors:
-                typer.echo(
-                    f"  ✗ {e.path.name}  [{e.category}]  {e.message}\n"
-                    f"    → {e.mitigation}",
-                    err=True,
-                )
+    # Error summary
+    if errors:
+        err_console.print(f"\n[yellow]⚠️  {len(errors)} file(s) failed:[/yellow]")
+        for e in errors:
+            err_console.print(
+                f"  [red]✗[/red] {e.path.name}  "
+                f"[dim]\\[{e.category}][/dim] {e.message}\n"
+                f"    [dim]→ {e.mitigation}[/dim]"
+            )
 
     n_ok = len(results)
     n_err = len(errors)
-    if batch and not json_output:
-        typer.echo(f"\nSummary: {n_ok} processed, {n_err} errored.")
+    total_det = sum(r["detections"] for r in results if isinstance(r["detections"], int))
+
+    if batch:
+        console.print(
+            f"\n[bold]Summary:[/bold] {n_ok} processed, "
+            f"{n_err} errored, {total_det} total redactions"
+        )
 
     # Consolidated batch report
-    if batch and write_reports and not json_output:
+    if batch and write_reports:
         from datetime import datetime
 
         from redactron.report.markdown import write_batch_summary
         run_ts = datetime.now().strftime("%Y-%m-%d-%H%M")
         reports_dir = (output or pdfs[0].parent) / "redacted-reports"
         md_path, _ = write_batch_summary(results, errors, reports_dir, run_ts)
-        typer.echo(f"Report: {md_path}")
+        console.print(f"[dim]Report: {md_path}[/dim]")
 
     if n_err > 0:
         raise typer.Exit(1 if n_ok > 0 else 2)

@@ -163,7 +163,7 @@ def ocr_page(page: fitz.Page, page_num: int, dpi: int = DEFAULT_DPI) -> OcrPageR
         ))
 
     if result.low_conf_count:
-        log.warning(
+        log.debug(
             "OCR page %d: %d low-confidence word(s) skipped (threshold=%d)",
             page_num, result.low_conf_count, CONF_THRESHOLD,
         )
