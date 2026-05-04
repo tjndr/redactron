@@ -59,6 +59,13 @@ redactron = "redactron.cli:app"
 [tool.hatch.version]
 source = "vcs"
 
+[tool.hatch.build.targets.sdist]
+exclude = [
+  ".kiro",
+  ".redactron",
+  "scripts",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/redactron"]
 artifacts = ["docs/examples"]
