@@ -18,6 +18,8 @@ Encrypted multi-client vault. Touch ID gated on macOS. Audit log. OCR fallback f
 
 ---
 
+![Redactron demo](assets/demo.gif)
+
 **[Read the v1.0 launch post →](LAUNCH.md)**
 
 ---
