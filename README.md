@@ -1,36 +1,70 @@
-# redactron
+# Redactron — Local-only PII redaction for PDFs
 
-> Local-only CLI for batch PII redaction in PDFs. No cloud. No telemetry. Verified output.
+> Your files stay on your machine. No cloud. No subscription. No telemetry.
 
+[![PyPI](https://img.shields.io/pypi/v/redactron)](https://pypi.org/project/redactron/)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://python.org)
 
-## What it does
+Redactron is an on-device privacy tool for redacting PII from PDFs. Define your PII once in a profile, run it against any number of documents, and get a verified redacted output — all without a single byte leaving your machine.
 
-redactron reads a profile YAML describing your PII — name aliases, addresses, phone numbers,
-emails, account numbers, custom regex patterns — redacts all matching text from PDFs using
-PyMuPDF, then verifies the redaction was complete. Everything runs on your machine. No data
-ever leaves your device.
+Encrypted multi-client vault. Touch ID gated on macOS. Audit log. OCR fallback for scanned documents. AGPL-3.0.
+
+---
+
+<!-- Demo GIF placeholder — add after first public release -->
+
+---
+
+## Why Redactron?
+
+**Your files stay local.** Every cloud redaction service — Adobe, iLovePDF, SmallPDF — uploads your documents to their servers. Redactron runs entirely on your machine. The PDF never leaves.
+
+**No subscription.** No per-page fees. No upsells. Install once, use forever.
+
+**Zero-trust, auditable source.** AGPL-3.0 means the full source is available for inspection. No black-box ML model deciding what to redact. You define exactly what gets removed.
+
+**Professional-grade.** AES-256-GCM encrypted vault for multiple client profiles. Touch ID gate on macOS (via LocalAuthentication). SQLite audit log of every run. Post-redaction verification that re-scans the output and reports survivors.
+
+## Comparison
+
+| | Redactron | Adobe Acrobat | iLovePDF | SmallPDF |
+|---|:---:|:---:|:---:|:---:|
+| Files leave your machine? | ❌ Never | ✅ Cloud | ✅ Cloud | ✅ Cloud |
+| Subscription required? | ❌ Free | ✅ $20+/mo | ✅ Freemium | ✅ Freemium |
+| Ads / upsells? | ❌ None | ✅ Yes | ✅ Yes | ✅ Yes |
+| Audit log? | ✅ SQLite | ❌ No | ❌ No | ❌ No |
+| Multi-client support? | ✅ Encrypted vault | ❌ No | ❌ No | ❌ No |
+| Verification report? | ✅ Built-in | ❌ No | ❌ No | ❌ No |
+| Source available? | ✅ AGPL-3.0 | ❌ Proprietary | ❌ Proprietary | ❌ Proprietary |
+| Works offline? | ✅ Always | ⚠️ Partial | ❌ No | ❌ No |
+
+*Comparison reflects publicly available information as of May 2026. Cloud services may change their terms.*
 
 ## Quickstart
 
 ```bash
 pip install redactron
-redactron init                 # creates ~/.redactron/profile.yaml
-# edit ~/.redactron/profile.yaml with your details
-redactron run document.pdf     # redacts → document_redacted.pdf + verification report
+redactron init
+redactron vault init
+redactron profile add --client me --from docs/examples/profile-template.yaml
+redactron run document.pdf --client me
 ```
+
+That's it. `document_redacted.pdf` is in the same directory, alongside a verification report.
 
 ## Features
 
-- **Profile-driven** — define your PII once in a YAML file; redact any number of PDFs
-- **Multi-detector** — name fuzzy-match, address parsing, account numbers, custom regex, Presidio NLP
-- **OCR fallback** — `--ocr` flag handles scanned/image-only PDFs via pytesseract
-- **Verification** — re-scans the redacted output and reports any survivors
-- **Multi-client vault** — AES-256-GCM encrypted vault for multiple client profiles
-- **Audit log** — SQLite log of every redaction run
-- **Batch mode** — `redactron run ./docs/` redacts an entire directory
-- **Dry run** — `redactron dry-run doc.pdf` previews detections without writing output
+- **Profile-driven** — define your PII once (names, aliases, addresses, phones, emails, SSNs, account numbers, custom regex); redact any number of PDFs
+- **Encrypted vault** — AES-256-GCM encrypted multi-client profile store; master key in macOS Keychain
+- **Touch ID gate** — LocalAuthentication soft-gate before every vault access on macOS
+- **OCR fallback** — auto-triggers on image-only pages via pytesseract; no flag needed
+- **Layout-aware** — column-aware address bridging prevents cross-column false positives in two-column PDFs
+- **Verification** — re-scans the redacted output and reports any PII survivors
+- **Audit log** — SQLite record of every run (filename, detections, verification status)
+- **Batch mode** — `redactron run ./docs/` redacts an entire directory; outputs go to `redacted/` subdir
+- **Consolidated report** — single `YYYY-MM-DD-HHMM_batch-summary.md` per batch run
+- **Dry run** — preview detections without writing output
 
 ## Profile example
 
@@ -50,27 +84,25 @@ detection:
   match_threshold: 0.85
 ```
 
-See [docs/PROFILE.md](docs/PROFILE.md) for the full schema reference.
+Copy `docs/examples/profile-template.yaml` for the full annotated schema.
 
 ## Multi-client vault
 
 ```bash
 redactron vault init
-redactron profile add --client alice --name "Alice Smith"
-redactron profile add --client bob --from bob_profile.yaml
+redactron profile add --client alice --from alice.yaml
+redactron profile add --client bob --from bob.yaml
 redactron run statement.pdf --client alice
 redactron profile list
 ```
 
-The vault is AES-256-GCM encrypted at rest. On macOS, the master key is stored in the
-login keychain and access is gated by a Touch ID prompt via LocalAuthentication.
+## Security model
 
-**Security model:** Touch ID is soft enforcement — it gates redactron's code path, not the
-keychain item itself. An unsigned Python package cannot use `kSecAttrAccessControl`
-(requires Apple code-signing entitlements). See [docs/SECURITY.md](docs/SECURITY.md) for
-the full threat model.
+The vault is AES-256-GCM encrypted at rest. On macOS, the master key is stored in the login keychain and access is gated by a Touch ID prompt via LocalAuthentication.
 
-## Performance targets (v1)
+**Touch ID is soft enforcement** — it gates redactron's code path, not the keychain item itself. An unsigned Python package cannot use `kSecAttrAccessControl` (requires Apple code-signing entitlements). See [docs/SECURITY.md](docs/SECURITY.md) for the full threat model.
+
+## Performance targets
 
 | Scenario | Target |
 |---|---|
@@ -89,7 +121,8 @@ the full threat model.
 ## CLI reference
 
 ```
-redactron run <path> [--ocr] [--client <id>] [--no-verify] [--json] [--output <path>]
+redactron run <path> [--client <id>] [--no-ocr] [--force-ocr] [--no-verify]
+                     [--json] [--output <path>] [--quiet] [--per-file-reports]
 redactron dry-run <path> [--json]
 redactron verify <path>
 redactron init
@@ -102,12 +135,20 @@ redactron profile delete <id>
 redactron profile import <yaml> [--client <id>]
 redactron log [--subject <id>] [--limit N]
 redactron report <run-id>
+redactron --version
 ```
+
+## Documentation
+
+- [docs/PROFILE.md](docs/PROFILE.md) — full profile schema reference
+- [docs/SECURITY.md](docs/SECURITY.md) — threat model, crypto choices, Touch ID implementation
+- [docs/PRIVACY.md](docs/PRIVACY.md) — local-only guarantee, audit DB schema, AGPL licensing
+- [docs/RELEASING.md](docs/RELEASING.md) — how to cut a release
+- [CONTRIBUTING.md](CONTRIBUTING.md) — dev setup, conventions, PR process
+- [CHANGELOG.md](CHANGELOG.md) — version history
 
 ## License
 
 AGPL-3.0 — see [LICENSE](LICENSE).
 
-redactron depends on [PyMuPDF](https://pymupdf.readthedocs.io/) which is also AGPL-3.0.
-If you distribute redactron as part of a proprietary product, the AGPL requires you to
-release your source. See [docs/PRIVACY.md](docs/PRIVACY.md) for details.
+Redactron depends on [PyMuPDF](https://pymupdf.readthedocs.io/) which is also AGPL-3.0. If you distribute redactron as part of a proprietary product, the AGPL requires you to release your source. See [docs/PRIVACY.md](docs/PRIVACY.md) for details.
