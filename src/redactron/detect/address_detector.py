@@ -90,7 +90,7 @@ def _is_address_candidate(text: str) -> bool:
     if not stripped or len(stripped) < 5:
         return False
     if _is_numeric_token(stripped):
-        log.warning(
+        log.debug(
             "Skipping fuzzy match for numeric span %r (exact-match only). "
             "This prevents over-redaction of unrelated digits.",
             stripped[:60],
@@ -264,7 +264,7 @@ def detect_addresses(
         normalized_text = _normalize_address(combined_text)
 
         if _is_numeric_token(normalized_text):
-            log.warning(
+            log.debug(
                 "Skipping fuzzy match for numeric span %r (exact-match only). "
                 "This prevents over-redaction of unrelated digits.",
                 combined_text[:60],
