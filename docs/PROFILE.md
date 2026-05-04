@@ -342,3 +342,67 @@ redactron run invoice.pdf --client bob
 
 If `~/.redactron/profile.yaml` exists alongside `vault.enc`, redactron uses `profile.yaml` and emits a deprecation warning. Migrate with `redactron profile import`.
 
+
+---
+
+## Adding a new client (template-first workflow)
+
+The recommended way to add a new client profile:
+
+```bash
+# 1. Copy the annotated template
+cp docs/examples/profile-template.yaml /tmp/alice.yaml
+
+# 2. Fill in values (open in your editor)
+$EDITOR /tmp/alice.yaml
+
+# 3. Import into the vault — source file is secure-wiped after import
+redactron profile add --client alice --from /tmp/alice.yaml
+
+# 4. Verify
+redactron profile show alice
+```
+
+The source YAML is overwritten with random bytes and deleted after a successful import. Never store PII in a plain-text file longer than necessary.
+
+---
+
+## Troubleshooting
+
+### No detections found
+
+**Symptom:** `redactron run doc.pdf` reports 0 detections.
+
+**Causes and fixes:**
+1. **Profile not loaded** — check `redactron profile list` or `redactron profile show <id>`. If empty, add a profile first.
+2. **display_name doesn't match** — the name in the PDF may be spelled differently. Add aliases: `aliases: ["Jane", "J. Smith", "Smith, Jane"]`.
+3. **Fuzzy threshold too high** — lower `match_threshold` from 0.85 to 0.75 for more permissive matching.
+4. **Image-only PDF** — OCR is on by default. If Tesseract isn't installed, install it: `brew install tesseract` (macOS) or `apt install tesseract-ocr` (Linux).
+5. **Wrong profile** — if using `--client`, confirm the client ID: `redactron profile list`.
+
+### OCR not triggering
+
+**Symptom:** Image-only PDF produces 0 detections, no OCR output.
+
+**Fix:** Ensure Tesseract is installed and on PATH:
+```bash
+tesseract --version
+```
+If missing: `brew install tesseract` (macOS) or `apt install tesseract-ocr` (Linux).
+
+Use `--force-ocr` to OCR every page regardless of text content.
+
+### Wrong fields in profile edit
+
+**Symptom:** `redactron profile edit <id>` opens a file with only a few fields.
+
+**Fix:** This is expected for profiles created with minimal data. The edit template now pre-populates all schema fields with empty defaults. If you see a sparse file, re-run `profile edit` after upgrading to v0.1.1+.
+
+### Verification fails after redaction
+
+**Symptom:** `verification_passed: false` with survivors listed.
+
+**Causes:**
+1. **Fuzzy match missed a variant** — add the surviving text as an alias.
+2. **Numeric span not redacted** — account numbers with only digits need `custom_patterns` with a regex, or `use_presidio: true` with appropriate entities.
+3. **OCR-derived text** — if the PDF has both text and image layers, some text may come from the image layer. Use `--force-ocr` to OCR all pages.
