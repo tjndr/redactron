@@ -105,7 +105,8 @@ def run(
     profile: str = typer.Option("", "--profile", "-p", help="Profile YAML path."),
     output: str = typer.Option("", "--output", "-o", help="Output path."),
     threshold: float = typer.Option(0.5, "--threshold", "-t", help="Detection score threshold."),
-    ocr: bool = typer.Option(False, "--ocr", help="Enable OCR fallback for image pages."),
+    no_ocr: bool = typer.Option(False, "--no-ocr", help="Disable OCR on image-only pages."),
+    force_ocr: bool = typer.Option(False, "--force-ocr", help="Force OCR on every page."),
     no_verify: bool = typer.Option(False, "--no-verify", help="Skip post-redaction verification."),
     json_output: bool = typer.Option(False, "--json", help="Output results as JSON."),
     subject: str = typer.Option("", "--subject", "-s", help="Subject slug for audit tagging."),
@@ -160,7 +161,8 @@ def run(
             json_output=json_output,
             subject_id=subject,
             write_reports=not no_report,
-            ocr_enabled=ocr,
+            ocr_enabled=not no_ocr,
+            force_ocr=force_ocr,
         )
     except RedactronError as exc:
         _error(str(exc), debug=debug, exc=exc)
@@ -177,7 +179,8 @@ def _run_pipeline(
     json_output: bool,
     subject_id: str = "",
     write_reports: bool = True,
-    ocr_enabled: bool = False,
+    ocr_enabled: bool = True,
+    force_ocr: bool = False,
 ) -> None:
     """Orchestrate extract → detect → redact → verify for one or more PDFs."""
     from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
@@ -212,6 +215,7 @@ def _run_pipeline(
                 verify=verify,
                 write_reports=write_reports,
                 ocr_enabled=ocr_enabled,
+                force_ocr=force_ocr,
             )
 
             r: dict[str, object] = {
@@ -283,7 +287,7 @@ detection:
   fuzzy_match: true
   match_threshold: 0.85
   full_token_min_length: 2
-  ocr_fallback: false
+  ocr_fallback: true
 """
 
 # ---------------------------------------------------------------------------
