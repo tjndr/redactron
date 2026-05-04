@@ -165,7 +165,7 @@ def run_pipeline(
                 "     and pass the OCR'd file to redactron.\n"
                 "Run with --debug to see per-page character counts."
             )
-        log.info("Image-only PDF detected; OCR fallback enabled.")
+        log.debug("Image-only PDF detected; OCR fallback enabled.")
     # Work on an in-memory copy; mutate it across passes
     buf = doc.tobytes()
     working_doc = fitz.open(stream=buf, filetype="pdf")
