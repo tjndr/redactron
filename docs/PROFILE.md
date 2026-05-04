@@ -1,7 +1,7 @@
 # redactron Profile Reference
 
 A profile YAML file tells redactron **what to redact** and **how to detect it**.
-By default, redactron runs in **profile-only mode** — it redacts exactly what you declare, nothing more.
+By default, redactron runs in **profile-only mode**. it redacts exactly what you declare, nothing more.
 
 ---
 
@@ -26,7 +26,7 @@ detection:
 ```
 
 Redacts only the names, addresses, account numbers, and patterns you declare.
-**Deterministic and privacy-preserving** — no ML model, no false positives from unrelated text.
+**Deterministic and privacy-preserving**. no ML model, no false positives from unrelated text.
 
 ### Profile + Presidio mode (opt-in)
 
@@ -41,7 +41,7 @@ detection:
     - CREDIT_CARD
 ```
 
-Adds Microsoft Presidio NER on top of profile detection. Profile hits are **authoritative** — they always win over Presidio on overlapping spans. Only the entity types you list are detected; there are no implicit defaults.
+Adds Microsoft Presidio NER on top of profile detection. Profile hits are **authoritative**. they always win over Presidio on overlapping spans. Only the entity types you list are detected; there are no implicit defaults.
 
 **Why profile-only is the v1 default:** Presidio can produce false positives (acquisition dates, market values, unrelated names). Profile-only mode gives you a deterministic privacy guarantee: only your declared PII is redacted.
 
@@ -107,7 +107,7 @@ detection:
 - **No-comma variants**: "100 Phillip St San Jose CA 95020" matches
 - **Multi-line**: each PDF text span is matched independently; a multi-line address produces one detection per line
 
-**Known limitation — house number disambiguation:** At the default threshold (0.85), "200 Phillip Street" will match a profile address of "100 Phillip Street" because they differ by only one character (~97% similar). To distinguish house numbers, raise `match_threshold` to 0.99 — but this may miss abbreviated or slightly misspelled forms. This is a v1 limitation; v2 will use structured address comparison.
+**Known limitation. house number disambiguation:** At the default threshold (0.85), "200 Phillip Street" will match a profile address of "100 Phillip Street" because they differ by only one character (~97% similar). To distinguish house numbers, raise `match_threshold` to 0.99. but this may miss abbreviated or slightly misspelled forms. This is a v1 limitation; v2 will use structured address comparison.
 
 ### Layout handling
 
@@ -132,7 +132,7 @@ Many PDFs render addresses across multiple lines (street on one line, city/state
 
 1. A line that parses as a street address (has a house number + street name) becomes an anchor.
 2. The detector looks forward up to `address_line_bridge_window` (default: 3) subsequent lines for continuation content: city/state/zip lines, occupancy lines (Suite, Apt, Unit), or empty lines.
-3. If a continuation is found, all constituent lines are matched together against the profile address. On a match, **each line gets its own redaction bbox** — no single giant rectangle.
+3. If a continuation is found, all constituent lines are matched together against the profile address. On a match, **each line gets its own redaction bbox**. no single giant rectangle.
 4. Bridging **stops immediately** if a prose line is encountered (more than 6 tokens with no ZIP or state abbreviation). This prevents bridging across account headers, footnotes, or other non-address content.
 
 Configure the window in your profile:
@@ -204,39 +204,39 @@ Understanding how each field type is matched prevents surprises:
 | Account numbers | Exact digit match (separators stripped) | Fuzzy on digits causes catastrophic over-redaction |
 | Custom patterns | Regex with `re.finditer` | Exact by definition |
 
-### Numeric tokens — exact-match only (guaranteed)
+### Numeric tokens. exact-match only (guaranteed)
 
 **Numeric tokens are never fuzzy-matched.** This is a hard guarantee, not a configuration option.
 
-A span is considered numeric if it contains only digits, spaces, hyphens, dots, and commas — for example:
+A span is considered numeric if it contains only digits, spaces, hyphens, dots, and commas. for example:
 - `103 9.22` (table cell with embedded space)
 - `1,234.56` (formatted number)
 - `95020` (ZIP code)
 - `1234-5678` (reference number)
 
-When the address detector encounters a numeric span, it logs a `WARNING` and skips fuzzy comparison:
+When the address detector encounters a numeric span, it logs a debug message and skips fuzzy comparison:
 
 ```
-WARNING Skipping fuzzy match for numeric span '103 9.22' (exact-match only).
+DEBUG Skipping fuzzy match for numeric span '103 9.22' (exact-match only).
         This prevents over-redaction of unrelated digits.
 ```
 
 This prevents table columns with quantities, prices, or reference numbers from being accidentally redacted because they share digits with a ZIP code or house number in your profile address.
 
-### Safety-net multi-pass — normal operation, not an error
+### Safety-net multi-pass. normal operation, not an error
 
-After applying redactions, the pipeline re-extracts the redacted PDF and re-runs all detectors (up to 3 passes total). If pass 2 or 3 finds additional spans, they are redacted and an **INFO** message is logged:
+After applying redactions, the pipeline re-extracts the redacted PDF and re-runs all detectors (up to 3 passes total). If pass 2 or 3 finds additional spans, they are redacted and a debug message is logged:
 
 ```
 Pass 2 supplemented pass 1 with 2 additional spans; output is complete.
 (Detector gap on this input; please report if reproducible on a non-edge-case PDF.)
 ```
 
-**This is normal.** Many edge-case PDFs (complex layouts, multi-column tables, OCR artifacts) trigger the safety net. The output is always complete and correct — the safety net is a defense-in-depth mechanism, not a sign of failure. You do not need to take any action.
+**This is normal.** Many edge-case PDFs (complex layouts, multi-column tables, OCR artifacts) trigger the safety net. The output is always complete and correct. the safety net is a defense-in-depth mechanism, not a sign of failure. You do not need to take any action.
 
 `WARNING`-level messages in the pipeline are reserved for actual problems: a redaction bbox rejected as too large, or `MAX_PASSES` exceeded on pathological input.
 
-### Reports — written by default
+### Reports. written by default
 
 Every successful `redactron run` writes two report files alongside the redacted PDF:
 
@@ -254,7 +254,7 @@ redactron run document.pdf --no-report
 
 ### Exhaustive detection
 
-Every detector scans **all occurrences** on every page. If an account number appears in the header, body table, and footer of a PDF, all three are detected and redacted. There is no deduplication by text value — each bbox span is a separate redaction target.
+Every detector scans **all occurrences** on every page. If an account number appears in the header, body table, and footer of a PDF, all three are detected and redacted. There is no deduplication by text value. each bbox span is a separate redaction target.
 
 ---
 
@@ -298,7 +298,7 @@ redactron profile add --client acme --from profile.yaml
 redactron profile list
 ```
 
-Shows client IDs and display names only — no PII.
+Shows client IDs and display names only. no PII.
 
 ### Showing a profile
 
@@ -306,7 +306,7 @@ Shows client IDs and display names only — no PII.
 # Masked (default)
 redactron profile show acme
 
-# Unmasked — requires TTY + confirmation + Touch ID
+# Unmasked. requires TTY + confirmation + Touch ID
 redactron profile show acme --reveal
 ```
 
@@ -335,7 +335,7 @@ redactron run invoice.pdf --client bob
 - Touch ID prompts once per CLI invocation (not once per profile lookup)
 - If Touch ID is unavailable, macOS falls back to your login password
 - Cancelling the prompt shows: "Touch ID authentication failed or was cancelled. Cannot unlock the vault."
-- Works without an Apple Developer account or code signing — uses LocalAuthentication framework
+- Works without an Apple Developer account or code signing. uses LocalAuthentication framework
 - Running in CI/headless: use `--profile` flag with a legacy YAML instead
 
 ### Backwards compatibility
@@ -356,7 +356,7 @@ cp docs/examples/profile-template.yaml /tmp/alice.yaml
 # 2. Fill in values (open in your editor)
 $EDITOR /tmp/alice.yaml
 
-# 3. Import into the vault — source file is secure-wiped after import
+# 3. Import into the vault. source file is secure-wiped after import
 redactron profile add --client alice --from /tmp/alice.yaml
 
 # 4. Verify
@@ -374,11 +374,11 @@ The source YAML is overwritten with random bytes and deleted after a successful 
 **Symptom:** `redactron run doc.pdf` reports 0 detections.
 
 **Causes and fixes:**
-1. **Profile not loaded** — check `redactron profile list` or `redactron profile show <id>`. If empty, add a profile first.
-2. **display_name doesn't match** — the name in the PDF may be spelled differently. Add aliases: `aliases: ["Jane", "J. Smith", "Smith, Jane"]`.
-3. **Fuzzy threshold too high** — lower `match_threshold` from 0.85 to 0.75 for more permissive matching.
-4. **Image-only PDF** — OCR is on by default. If Tesseract isn't installed, install it: `brew install tesseract` (macOS) or `apt install tesseract-ocr` (Linux).
-5. **Wrong profile** — if using `--client`, confirm the client ID: `redactron profile list`.
+1. **Profile not loaded**. check `redactron profile list` or `redactron profile show <id>`. If empty, add a profile first.
+2. **display_name doesn't match**. the name in the PDF may be spelled differently. Add aliases: `aliases: ["Jane", "J. Smith", "Smith, Jane"]`.
+3. **Fuzzy threshold too high**. lower `match_threshold` from 0.85 to 0.75 for more permissive matching.
+4. **Image-only PDF**. OCR is on by default. If Tesseract isn't installed, install it: `brew install tesseract` (macOS) or `apt install tesseract-ocr` (Linux).
+5. **Wrong profile**. if using `--client`, confirm the client ID: `redactron profile list`.
 
 ### OCR not triggering
 
@@ -403,6 +403,6 @@ Use `--force-ocr` to OCR every page regardless of text content.
 **Symptom:** `verification_passed: false` with survivors listed.
 
 **Causes:**
-1. **Fuzzy match missed a variant** — add the surviving text as an alias.
-2. **Numeric span not redacted** — account numbers with only digits need `custom_patterns` with a regex, or `use_presidio: true` with appropriate entities.
-3. **OCR-derived text** — if the PDF has both text and image layers, some text may come from the image layer. Use `--force-ocr` to OCR all pages.
+1. **Fuzzy match missed a variant**. add the surviving text as an alias.
+2. **Numeric span not redacted**. account numbers with only digits need `custom_patterns` with a regex, or `use_presidio: true` with appropriate entities.
+3. **OCR-derived text**. if the PDF has both text and image layers, some text may come from the image layer. Use `--force-ocr` to OCR all pages.
