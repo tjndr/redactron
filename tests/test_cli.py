@@ -42,21 +42,29 @@ def test_help() -> None:
     assert result.exit_code == 0
 
 
-def test_init_creates_profile(tmp_path: Path) -> None:
-    profile = tmp_path / "profile.yaml"
-    result = runner.invoke(app, ["init"], env={"REDACTRON_PROFILE": str(profile)})
+def test_init_creates_directory(tmp_path: Path) -> None:
+    """init creates ~/.redactron/ dir and audit.db; no profile.yaml."""
+    redactron_dir = tmp_path / ".redactron"
+    result = runner.invoke(
+        app, ["init"],
+        env={"HOME": str(tmp_path), "REDACTRON_DB": str(redactron_dir / "audit.db")},
+    )
     assert result.exit_code == 0
-    assert profile.exists()
-    assert "version: 1" in profile.read_text()
+    assert redactron_dir.exists()
+    assert not (redactron_dir / "profile.yaml").exists()
 
 
-def test_init_skips_if_exists(tmp_path: Path) -> None:
-    profile = tmp_path / "profile.yaml"
-    profile.write_text("existing")
-    result = runner.invoke(app, ["init"], env={"REDACTRON_PROFILE": str(profile)})
+def test_init_warns_on_legacy_profile(tmp_path: Path) -> None:
+    """init warns if legacy profile.yaml already exists."""
+    redactron_dir = tmp_path / ".redactron"
+    redactron_dir.mkdir()
+    (redactron_dir / "profile.yaml").write_text("version: 1\n")
+    result = runner.invoke(
+        app, ["init"],
+        env={"HOME": str(tmp_path), "REDACTRON_DB": str(redactron_dir / "audit.db")},
+    )
     assert result.exit_code == 0
-    assert "already exists" in result.output
-    assert profile.read_text() == "existing"  # not overwritten
+    assert "Legacy" in result.output or "deprecated" in result.output.lower()
 
 
 def test_run_single_pdf(tmp_path: Path) -> None:
