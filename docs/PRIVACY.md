@@ -3,9 +3,8 @@
 ## Local-only guarantee
 
 redactron processes all PDFs entirely on your machine. There are no network calls in the
-redaction pipeline — not during detection, not during redaction, not during verification.
-This is enforced by design: the codebase has no HTTP client dependency and no outbound
-socket calls.
+redaction pipeline: not during detection, not during redaction, not during verification.
+The codebase has no HTTP client dependency and no outbound socket calls.
 
 You can verify this yourself:
 
@@ -34,7 +33,7 @@ SQLite database recording each redaction run:
 | `verification_passed` | Boolean |
 | `processed_at` | UTC timestamp |
 
-The audit log does **not** store: file paths, file contents, detected PII text, or any
+The audit log does **not** store file paths, file contents, detected PII text, or any
 personally identifiable information beyond what you explicitly put in your profile name.
 
 ### Encrypted vault (`~/.redactron/vault.enc`)
@@ -61,9 +60,9 @@ there is nothing to opt out of.
 
 If your home directory is synced to iCloud, Dropbox, or similar services:
 
-- `vault.enc` is safe to sync — it is opaque ciphertext without the keychain master key.
-- `profile.yaml` contains plaintext PII — **exclude it from sync** or migrate to the vault.
-- `audit.db` contains filenames and run metadata — exclude if you consider this sensitive.
+- `vault.enc` is safe to sync. It is opaque ciphertext without the keychain master key.
+- `profile.yaml` contains plaintext PII. Exclude it from sync or migrate to the vault.
+- `audit.db` contains filenames and run metadata. Exclude it if you consider this sensitive.
 
 Add to your sync exclusion list:
 ```
@@ -88,14 +87,23 @@ redactron is licensed under AGPL-3.0. It depends on
 If you need a commercial license for PyMuPDF that permits proprietary distribution, contact
 [Artifex Software](https://artifex.com/licensing/).
 
-## Comparison with cloud redaction services
+## Compared to cloud redaction services
+
+Free online redactors are usually ad-supported and many run analytics on the documents you
+upload. For medical records, legal documents, or anything covered by HIPAA, GDPR, or
+attorney-client privilege, that is a serious concern. Adobe Acrobat uploads files to
+Adobe's servers. iLovePDF and SmallPDF are cloud services with freemium models. You have
+no visibility into what happens to your files after upload.
+
+redactron has no network calls in the redaction pipeline. The codebase has no HTTP client
+dependency. You can verify this with a packet capture.
 
 | Feature | redactron | Cloud services |
 |---|---|---|
-| Data leaves your machine | ❌ Never | ✅ Always |
-| Works offline | ✅ Yes | ❌ No |
-| Audit trail | ✅ Local SQLite | Varies |
-| Profile-driven | ✅ Yes | Rarely |
-| Verification | ✅ Built-in | Rarely |
+| Data leaves your machine | Never | Always |
+| Works offline | Yes | No |
+| Audit trail | Local SQLite | Varies |
+| Profile-driven | Yes | Rarely |
+| Verification | Built-in | Rarely |
 | Cost | Free (AGPL) | Per-page fees |
-| HIPAA/GLBA suitability | ✅ No BAA needed | Requires BAA |
+| HIPAA/GLBA suitability | No BAA needed | Requires BAA |

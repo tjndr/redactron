@@ -66,5 +66,5 @@ Be respectful. Harassment, discrimination, or personal attacks will not be toler
 - ruff with default rules + isort, 100-char line length.
 - mypy strict for `src/redactron/`; lenient for `tests/`.
 - Google-style docstrings on all public functions.
-- No business logic in `cli.py` — orchestration only.
+- No business logic in `cli.py`. Orchestration only.
 - `log.warning()` reserved for actual problems. Expected behavior (numeric span routing, OCR auto-trigger) uses `log.debug()`.
