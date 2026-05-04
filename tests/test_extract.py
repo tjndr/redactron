@@ -325,3 +325,41 @@ def test_paint_ocr_redactions_no_match_returns_zero() -> None:
     words = [OcrWord(page_num=0, text="Invoice", bbox=(10.0, 10.0, 80.0, 25.0), conf=95)]
     count = paint_ocr_redactions(page, words, {"Alice"})
     assert count == 0
+
+
+def test_ocr_detections_appended_to_pipeline_result(tmp_path: Path) -> None:
+    """OCR-redacted files show correct detection count (not 0)."""
+    from unittest.mock import patch
+
+    import fitz
+
+    from redactron.pipeline import run_pipeline
+    from redactron.profile import Profile
+
+    profile = Profile.model_validate({
+        "version": 1,
+        "subject": {"display_name": "Alice"},
+        "detection": {"use_presidio": False, "presidio_entities": []},
+    })
+
+    # Image-only PDF (no text layer)
+    doc = fitz.open()
+    page = doc.new_page(width=612, height=792)
+    page.draw_rect(fitz.Rect(0, 0, 612, 792), color=(1, 1, 1), fill=(1, 1, 1))
+    pdf_path = tmp_path / "scan.pdf"
+    doc.save(str(pdf_path))
+
+    mock_data = {
+        "text": ["Alice"], "conf": [95],
+        "left": [100], "top": [100], "width": [50], "height": [15], "level": [5],
+    }
+
+    with patch("pytesseract.image_to_data", return_value=mock_data):
+        result = run_pipeline(
+            pdf_path, tmp_path / "out.pdf", profile,
+            verify=False, write_reports=False, ocr_enabled=True,
+        )
+
+    assert result.detections_total > 0, "OCR detections should be counted"
+    assert any(d.entity_type == "OCR" for d in result.detections), \
+        "Detections should include OCR entries"
