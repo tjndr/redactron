@@ -1,0 +1,47 @@
+# Redactron profile template — full annotated schema.
+#
+# Copy this file, fill in values, then import:
+#   redactron profile add --client <id> --from /path/to/copy.yaml
+#
+# The source file is secure-wiped (3-pass overwrite + unlink)
+# after successful import.
+#
+# All fields are optional except subject.display_name.
+
+version: 1
+name: ""  # optional: human-readable profile name (not the client ID)
+
+subject:
+  display_name: ""        # required: primary subject name (e.g. "Jane Smith")
+  aliases: []             # variant spellings, "Last, First", nicknames
+                          # e.g. ["Jane", "J. Smith", "Smith, Jane"]
+  addresses: []           # full mailing addresses; multi-line OK
+                          # e.g. ["123 Main Street, Springfield, IL 62701"]
+  phones: []              # any format; matching normalizes digits
+                          # e.g. ["+1-555-867-5309", "555.867.5309"]
+  emails: []              # exact match (case-insensitive)
+                          # e.g. ["jane@example.com"]
+  ssns: []                # XXX-XX-XXXX format
+                          # e.g. ["123-45-6789"]
+  account_numbers: []     # list of {value: "...", preserve_last: N}
+                          # preserve_last: keep last N digits visible (default 4)
+                          # e.g. [{value: "ACC-9900112233", preserve_last: 4}]
+  custom_patterns: []     # named regex patterns
+                          # e.g. [{name: "employee_id", regex: "EMP-\\d{6}"}]
+
+detection:
+  use_presidio: false     # enable Microsoft Presidio NLP for auto-detection
+                          # of PHONE_NUMBER, EMAIL_ADDRESS, etc.
+  presidio_entities: []   # whitelist when use_presidio: true
+                          # e.g. ["PHONE_NUMBER", "EMAIL_ADDRESS", "US_SSN"]
+  fuzzy_match: true       # fuzzy-match names and aliases (recommended)
+  match_threshold: 0.85   # 0.0–1.0; lower = more permissive (more false positives)
+                          # raise to 0.99 to distinguish house numbers
+  full_token_min_length: 2  # ignore tokens shorter than this (avoids "I", "a")
+  ocr_fallback: true      # auto-OCR image-only pages via pytesseract
+                          # requires Tesseract installed; set false to disable
+  column_aware: true      # restrict address bridging to same column
+                          # (prevents cross-column false positives in two-column PDFs)
+  scan_figures: false     # detect text inside figure/drawing regions
+                          # false = skip figures (recommended for most docs)
+  address_line_bridge_window: 3  # max lines to bridge for multi-line addresses

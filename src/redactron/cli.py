@@ -117,7 +117,7 @@ def init() -> None:
     else:
         typer.echo(
             "\nTo add your first client profile:\n"
-            "  1. Copy docs/examples/profile-template.yaml to /tmp/me.yaml\n"
+            "  1. redactron profile template --output /tmp/me.yaml\n"
             "  2. Fill in your PII values\n"
             "  3. redactron profile add --client me --from /tmp/me.yaml"
         )
@@ -830,6 +830,30 @@ def profile_list() -> None:
     typer.echo("-" * 70)
     for m in metas:
         typer.echo(f"{m.client_id:<20}  {m.display_name:<30}  {m.created_at[:10]}")
+
+
+@profile_app.command("template")
+def profile_template(
+    output: str = typer.Option("", "--output", "-o", help="Write template to path."),
+    client: str = typer.Option("", "--client", "-c", help="Pre-fill display_name."),
+) -> None:
+    """Print the bundled profile template. Save to a file, fill in values, then import."""
+    import importlib.resources as ir
+
+    text = (ir.files("redactron") / "data" / "profile-template.yaml").read_text()
+
+    if client:
+        text = text.replace('display_name: ""', f'display_name: "{client}"', 1)
+
+    if output:
+        out_path = Path(output)
+        out_path.write_text(text)
+        typer.echo(f"✅ Template written to {out_path}")
+        typer.echo(
+            f"   Fill in values, then: redactron profile add --client <id> --from {out_path}"
+        )
+    else:
+        typer.echo(text, nl=False)
 
 
 @profile_app.command("show")
