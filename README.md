@@ -5,6 +5,10 @@
 ██║  ██║███████╗██████╔╝██║  ██║╚██████╗   ██║   ██║  ██║╚██████╔╝██║ ╚████║
 ╚═╝  ╚═╝╚══════╝╚═════╝ ╚═╝  ╚═╝ ╚═════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
 
+<p align="center">
+  <img src="assets/banner.png" alt="Redactron" width="100%">
+</p>
+
 # Redactron — Local-only PII redaction for PDFs
 
 > Your files stay on your machine. No cloud. No subscription. No telemetry.
