@@ -58,16 +58,45 @@ def version_cmd() -> None:
 
 @app.command()
 def init() -> None:
-    """Create a default profile.yaml in ~/.redactron/."""
-    profile_path = default_profile_path()
-    if profile_path.exists():
-        typer.echo(f"Profile already exists: {profile_path}")
-        raise typer.Exit()
+    """Create ~/.redactron/ directory and initialize the audit database.
 
-    profile_path.parent.mkdir(parents=True, exist_ok=True)
-    profile_path.write_text(_DEFAULT_PROFILE)
-    typer.echo(f"Created profile: {profile_path}")
-    typer.echo("Edit it to add your name, addresses, and other PII to redact.")
+    No profile.yaml is created. Use the template-first workflow instead:
+      1. Copy docs/examples/profile-template.yaml to /tmp/<client>.yaml
+      2. Fill in your PII values
+      3. redactron profile add --client <id> --from /tmp/<client>.yaml
+    """
+    import os
+
+    profile_dir = Path.home() / ".redactron"
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    typer.echo(f"✅ Created directory: {profile_dir}")
+
+    # Touch the audit DB (creates schema if absent)
+    db_path = Path(os.environ.get("REDACTRON_DB", str(profile_dir / "audit.db")))
+    if not db_path.exists():
+        import sqlite3
+        # Importing log_run triggers schema creation on first use; just connect to create file
+        conn = sqlite3.connect(str(db_path))
+        conn.close()
+        typer.echo(f"✅ Initialized audit database: {db_path}")
+    else:
+        typer.echo(f"   Audit database already exists: {db_path}")
+
+    # Backwards-compat: warn if legacy profile.yaml exists
+    legacy = profile_dir / "profile.yaml"
+    if legacy.exists():
+        typer.echo(
+            "⚠️  Legacy profile.yaml detected. It will continue to work but is deprecated.\n"
+            f"   Migrate with: redactron profile add --client default --from {legacy}",
+            err=True,
+        )
+    else:
+        typer.echo(
+            "\nTo add your first client profile:\n"
+            "  1. Copy docs/examples/profile-template.yaml to /tmp/me.yaml\n"
+            "  2. Fill in your PII values\n"
+            "  3. redactron profile add --client me --from /tmp/me.yaml"
+        )
 
 
 @app.command()
