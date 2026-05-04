@@ -63,5 +63,5 @@ redactron --version
 ## Build smoke test
 
 The `release.yml` workflow also runs a build-only job on every push to `main`
-(no publish). This catches packaging regressions early — if `uv build` fails,
+(no publish). This catches packaging regressions early. If `uv build` fails,
 the CI check fails before any tag is pushed.
