@@ -187,6 +187,8 @@ def run(
             ocr_enabled=not no_ocr,
             force_ocr=force_ocr,
         )
+    except typer.Exit:
+        raise
     except RedactronError as exc:
         _error(str(exc), debug=debug, exc=exc)
     except Exception as exc:
@@ -208,7 +210,7 @@ def _run_pipeline(
     """Orchestrate extract → detect → redact → verify for one or more PDFs."""
     from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
 
-    from redactron.pipeline import run_pipeline
+    from redactron.pipeline import BatchFileError, _categorize_error, run_pipeline
 
     pdfs = _collect_pdfs(path)
     if not pdfs:
@@ -217,6 +219,7 @@ def _run_pipeline(
 
     batch = len(pdfs) > 1
     results = []
+    errors: list[BatchFileError] = []
 
     progress = Progress(
         TextColumn("[progress.description]{task.description}"),
@@ -230,16 +233,28 @@ def _run_pipeline(
         for pdf_path in pdfs:
             progress.update(task, description=f"[cyan]{pdf_path.name}[/cyan]")
             out_path = _output_path(pdf_path, output, batch)
-            result = run_pipeline(
-                pdf_path,
-                out_path,
-                profile,
-                score_threshold=threshold,
-                verify=verify,
-                write_reports=write_reports,
-                ocr_enabled=ocr_enabled,
-                force_ocr=force_ocr,
-            )
+            try:
+                result = run_pipeline(
+                    pdf_path,
+                    out_path,
+                    profile,
+                    score_threshold=threshold,
+                    verify=verify,
+                    write_reports=write_reports,
+                    ocr_enabled=ocr_enabled,
+                    force_ocr=force_ocr,
+                )
+            except Exception as exc:
+                category, mitigation = _categorize_error(exc)
+                errors.append(BatchFileError(
+                    path=pdf_path,
+                    category=category,
+                    message=str(exc).splitlines()[0],
+                    mitigation=mitigation,
+                ))
+                log.debug("Error processing %s: %s", pdf_path, exc, exc_info=True)
+                progress.advance(task)
+                continue
 
             r: dict[str, object] = {
                 "input": str(result.input_path),
@@ -270,6 +285,23 @@ def _run_pipeline(
                 isinstance(r["verification"], dict) and r["verification"]["passed"]
             ) else "✗"
             typer.echo(f"{status} {r['input']} → {r['output']} ({r['detections']} detections)")
+
+        if errors:
+            typer.echo(f"\n⚠️  {len(errors)} file(s) failed:", err=True)
+            for e in errors:
+                typer.echo(
+                    f"  ✗ {e.path.name}  [{e.category}]  {e.message}\n"
+                    f"    → {e.mitigation}",
+                    err=True,
+                )
+
+    n_ok = len(results)
+    n_err = len(errors)
+    if batch and not json_output:
+        typer.echo(f"\nSummary: {n_ok} processed, {n_err} errored.")
+
+    if n_err > 0:
+        raise typer.Exit(1 if n_ok > 0 else 2)
 
 
 def _collect_pdfs(path: Path) -> list[Path]:
