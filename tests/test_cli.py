@@ -106,10 +106,11 @@ def test_run_directory_of_pdfs(tmp_path: Path) -> None:
     for i in range(3):
         _make_pdf_file(pdf_dir, f"doc{i}.pdf")
     result = runner.invoke(
-        app, ["run", str(pdf_dir), "--output", str(out_dir), "--no-verify"]
+        app, ["run", str(pdf_dir), "--output", str(out_dir), "--no-verify"],
+        env={"NO_BANNER": "1"},
     )
     assert result.exit_code == 0
-    assert len(list(out_dir.glob("*.pdf"))) == 3
+    assert len(list((out_dir / "redacted").glob("*.pdf"))) == 3
 
 
 def test_run_with_verify(tmp_path: Path) -> None:
@@ -128,10 +129,11 @@ def test_batch_progress_produces_all_outputs(tmp_path: Path) -> None:
     for i in range(5):
         _make_pdf_file(pdf_dir, f"file{i}.pdf")
     result = runner.invoke(
-        app, ["run", str(pdf_dir), "--output", str(out_dir), "--no-verify"]
+        app, ["run", str(pdf_dir), "--output", str(out_dir), "--no-verify"],
+        env={"NO_BANNER": "1"},
     )
     assert result.exit_code == 0
-    assert len(list(out_dir.glob("*.pdf"))) == 5
+    assert len(list((out_dir / "redacted").glob("*.pdf"))) == 5
 
 
 def test_batch_json_output_has_all_entries(tmp_path: Path) -> None:
@@ -180,8 +182,8 @@ def test_output_path_single_file(tmp_path: Path) -> None:
 
 
 def test_output_path_batch_uses_output_dir(tmp_path: Path) -> None:
-    """_output_path in batch mode places file in output dir."""
+    """_output_path in batch mode places file in output_dir/redacted/."""
     from redactron.cli import _output_path
     out_dir = tmp_path / "out"
     result = _output_path(tmp_path / "doc.pdf", out_dir, True)
-    assert result == out_dir / "doc_redacted.pdf"
+    assert result == out_dir / "redacted" / "doc_redacted.pdf"
