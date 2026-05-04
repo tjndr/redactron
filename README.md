@@ -38,13 +38,20 @@ For professional use, the vault stores multiple client profiles encrypted with A
 pip install redactron
 redactron init
 redactron vault init
+
+# Get the profile template, fill in your details, import it
 redactron profile template --output /tmp/me.yaml
-# edit /tmp/me.yaml with your details
+# edit /tmp/me.yaml with your name, addresses, account numbers, etc.
 redactron profile add --client me --from /tmp/me.yaml
+
+# Redact a single file
 redactron run document.pdf --client me
+
+# Redact an entire folder — outputs go to ./redacted/
+redactron run ./documents/ --client me
 ```
 
-`document_redacted.pdf` lands in the same directory, alongside a verification report.
+`document_redacted.pdf` lands in the same directory. For a folder, redacted files go to `documents/redacted/`, with a consolidated summary report in `documents/redacted-reports/`.
 
 ## Features
 
