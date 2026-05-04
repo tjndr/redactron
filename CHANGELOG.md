@@ -6,6 +6,12 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-05-04
+
+### Fixed
+
+- sdist no longer bundles `.kiro/`, `.redactron/`, or `scripts/` (added `[tool.hatch.build.targets.sdist] exclude` to `pyproject.toml`).
+
 ## [0.1.2] — 2026-05-04
 
 ### Fixed
@@ -100,6 +106,7 @@ First public release. Covers milestones M1 through M4 and M3.5.
 - cryptography 43.0.3
 - keyring 25.5.0
 
+[0.1.3]: https://github.com/tjndr/redactron/releases/tag/v0.1.3
 [0.1.2]: https://github.com/tjndr/redactron/releases/tag/v0.1.2
 [0.1.1]: https://github.com/tjndr/redactron/releases/tag/v0.1.1
 [0.1.0]: https://github.com/tjndr/redactron/releases/tag/v0.1.0
