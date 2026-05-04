@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "redactron"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Local-only CLI for batch PII redaction in PDFs"
 readme = "README.md"
 license = { text = "AGPL-3.0-only" }
@@ -55,6 +55,9 @@ ui = [
 
 [project.scripts]
 redactron = "redactron.cli:app"
+
+[tool.hatch.version]
+source = "vcs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/redactron"]
