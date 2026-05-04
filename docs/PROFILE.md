@@ -350,8 +350,8 @@ If `~/.redactron/profile.yaml` exists alongside `vault.enc`, redactron uses `pro
 The recommended way to add a new client profile:
 
 ```bash
-# 1. Copy the annotated template
-cp docs/examples/profile-template.yaml /tmp/alice.yaml
+# 1. Export the bundled template
+redactron profile template --output /tmp/alice.yaml
 
 # 2. Fill in values (open in your editor)
 $EDITOR /tmp/alice.yaml
