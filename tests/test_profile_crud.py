@@ -217,3 +217,112 @@ def test_vault_init_already_exists(tmp_path: Path) -> None:
         result = runner.invoke(app, ["vault", "init"])
     assert result.exit_code == 0
     assert "already exists" in result.output
+
+
+# ---------------------------------------------------------------------------
+# BLD-FIX-31: profile add --from secure-wipe
+# ---------------------------------------------------------------------------
+
+def test_profile_add_from_wipes_source(tmp_path: Path) -> None:
+    """profile add --from wipes source file after successful import."""
+    store = _make_store(tmp_path)
+    src = tmp_path / "alice.yaml"
+    src.write_text(
+        "version: 1\nsubject:\n  display_name: Alice\ndetection: {}\n"
+    )
+    with _patch_store(store):
+        result = runner.invoke(
+            app,
+            ["profile", "add", "--client", "alice", "--from", str(src)],
+            env={"NO_BANNER": "1"},
+        )
+    assert result.exit_code == 0, result.output
+    assert not src.exists(), "Source file should be wiped after import"
+
+
+def test_profile_add_from_keep_source(tmp_path: Path) -> None:
+    """profile add --from --keep-source leaves source file intact."""
+    store = _make_store(tmp_path)
+    src = tmp_path / "bob.yaml"
+    src.write_text(
+        "version: 1\nsubject:\n  display_name: Bob\ndetection: {}\n"
+    )
+    with _patch_store(store):
+        result = runner.invoke(
+            app,
+            ["profile", "add", "--client", "bob", "--from", str(src), "--keep-source"],
+            env={"NO_BANNER": "1"},
+        )
+    assert result.exit_code == 0, result.output
+    assert src.exists(), "Source file should remain with --keep-source"
+
+
+def test_profile_add_from_dry_run(tmp_path: Path) -> None:
+    """profile add --from --dry-run validates without writing or wiping."""
+    store = _make_store(tmp_path)
+    src = tmp_path / "carol.yaml"
+    src.write_text(
+        "version: 1\nsubject:\n  display_name: Carol\ndetection: {}\n"
+    )
+    with _patch_store(store):
+        result = runner.invoke(
+            app,
+            ["profile", "add", "--client", "carol", "--from", str(src), "--dry-run"],
+            env={"NO_BANNER": "1"},
+        )
+    assert result.exit_code == 0, result.output
+    assert "[dry-run]" in result.output
+    assert src.exists(), "Source file must not be wiped in dry-run"
+    assert store.get_profile("carol") is None, "Profile must not be written in dry-run"
+
+
+# ---------------------------------------------------------------------------
+# BLD-FIX-34: profile edit ValidationError fix
+# ---------------------------------------------------------------------------
+
+def test_profile_edit_full_profile_no_crash(tmp_path: Path) -> None:
+    """profile edit on a fully-populated profile succeeds (no ValidationError)."""
+    store = _make_store(tmp_path)
+    store.add_profile(
+        "alice",
+        {
+            "version": 1,
+            "subject": {
+                "display_name": "Alice",
+                "aliases": ["A"],
+                "addresses": [],
+                "phones": [],
+                "emails": [],
+                "ssns": [],
+                "account_numbers": [],
+                "custom_patterns": [],
+            },
+            "detection": {},
+        },
+        "Alice",
+    )
+    # Use 'true' as EDITOR so it exits immediately without modifying the file
+    with _patch_store(store):
+        result = runner.invoke(
+            app,
+            ["profile", "edit", "alice"],
+            env={"EDITOR": "true", "NO_BANNER": "1"},
+        )
+    assert result.exit_code == 0, result.output
+
+
+def test_profile_edit_minimal_profile_no_crash(tmp_path: Path) -> None:
+    """profile edit on a minimal profile (only display_name) succeeds."""
+    store = _make_store(tmp_path)
+    store.add_profile(
+        "bob",
+        {"subject": {"display_name": "Bob"}},
+        "Bob",
+    )
+    with _patch_store(store):
+        result = runner.invoke(
+            app,
+            ["profile", "edit", "bob"],
+            env={"EDITOR": "true", "NO_BANNER": "1"},
+        )
+    assert result.exit_code == 0, result.output

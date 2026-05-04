@@ -760,29 +760,62 @@ def _mask_profile(profile_dict: dict) -> dict:  # type: ignore[type-arg]
 def profile_add(
     client: str = typer.Option(..., "--client", "-c", help="Client ID slug."),
     display_name: str = typer.Option("", "--name", "-n", help="Display name."),
-    from_yaml: str = typer.Option("", "--from", help="Import from YAML file."),
+    from_yaml: str = typer.Option(
+        "", "--from", help="Import from YAML file (source is secure-wiped)."
+    ),
+    keep_source: bool = typer.Option(
+        False, "--keep-source", help="Keep source YAML after import (default: wipe)."
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Validate without writing or wiping."),
 ) -> None:
-    """Add a new client profile to the vault."""
+    """Add a new client profile to the vault. Source YAML is secure-wiped after import."""
+    import os
+
+    import yaml
+
     from redactron.profile import load_profile
 
     store = _get_vault_store()
 
     if from_yaml:
-        profile_obj = load_profile(Path(from_yaml))
+        src_path = Path(from_yaml)
+        profile_obj = load_profile(src_path)
         profile_dict = profile_obj.model_dump(mode="json")
         name = display_name or profile_obj.subject.display_name
+
+        if dry_run:
+            typer.echo(f"[dry-run] Would import '{from_yaml}' as client '{client}':")
+            typer.echo(yaml.dump(profile_dict, default_flow_style=False))
+            return
+
+        try:
+            store.add_profile(client, profile_dict, name)
+            typer.echo(f"✅ Profile '{client}' ({name}) added to vault.")
+        except Exception as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(1) from exc
+
+        # Secure-wipe source unless --keep-source
+        if not keep_source and src_path.exists():
+            size = src_path.stat().st_size
+            with src_path.open("wb") as fh:
+                fh.write(os.urandom(max(size, 1)))
+            src_path.unlink()
+            typer.echo(f"🔒 Source file wiped: {src_path}")
     else:
+        if dry_run:
+            typer.echo("[dry-run] No --from specified; nothing to validate.")
+            return
         if not display_name:
             display_name = typer.prompt("Display name")
         profile_dict = {"subject": {"display_name": display_name}, "detection": {}}
         name = display_name
-
-    try:
-        store.add_profile(client, profile_dict, name)
-        typer.echo(f"✅ Profile '{client}' ({name}) added to vault.")
-    except Exception as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1) from exc
+        try:
+            store.add_profile(client, profile_dict, name)
+            typer.echo(f"✅ Profile '{client}' ({name}) added to vault.")
+        except Exception as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(1) from exc
 
 
 @profile_app.command("list")
@@ -910,11 +943,35 @@ def profile_edit(
         raise typer.Exit(1)
 
     # BLD-FIX-13: merge existing data onto full schema defaults so all fields visible
-    from redactron.profile import Profile, Subject
-    defaults = Profile(subject=Subject(display_name="")).model_dump(mode="json")
-    merged: dict = {**defaults, **profile_dict}  # type: ignore[type-arg]
-    merged["subject"] = {**defaults["subject"], **profile_dict.get("subject", {})}
-    merged["detection"] = {**defaults["detection"], **profile_dict.get("detection", {})}
+    # Use hardcoded dict to avoid Pydantic validation (BLD-FIX-34: Subject(display_name='') crashes)
+    _PROFILE_DEFAULTS: dict = {  # type: ignore[type-arg]
+        "version": 1,
+        "name": "",
+        "subject": {
+            "display_name": "",
+            "aliases": [],
+            "addresses": [],
+            "phones": [],
+            "emails": [],
+            "ssns": [],
+            "account_numbers": [],
+            "custom_patterns": [],
+        },
+        "detection": {
+            "use_presidio": False,
+            "presidio_entities": [],
+            "fuzzy_match": True,
+            "match_threshold": 0.85,
+            "full_token_min_length": 2,
+            "ocr_fallback": True,
+            "column_aware": True,
+            "scan_figures": False,
+            "address_line_bridge_window": 3,
+        },
+    }
+    merged: dict = {**_PROFILE_DEFAULTS, **profile_dict}  # type: ignore[type-arg]
+    merged["subject"] = {**_PROFILE_DEFAULTS["subject"], **profile_dict.get("subject", {})}
+    merged["detection"] = {**_PROFILE_DEFAULTS["detection"], **profile_dict.get("detection", {})}
 
     # BLD-FIX-12: shlex.split so EDITOR="code --wait" works correctly
     editor_str = os.environ.get("EDITOR", "vi")
