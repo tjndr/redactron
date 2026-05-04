@@ -6,6 +6,17 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-05-04
+
+### Fixed
+
+- Profile template `account_numbers` field now uses block sequence format instead of `[]`, so users can uncomment the example directly without restructuring the YAML.
+- README profile example uses a realistic account number (`0021305789Q834`) matching the template example.
+
+### Changed
+
+- Removed `.kiro/`, `.redactron/`, and `scripts/` from repository history. These contained internal tooling, prompts, and credit-tracking scripts that are not part of the build or usable product.
+
 ## [0.1.1] — 2026-05-04
 
 ### Fixed
@@ -89,5 +100,6 @@ First public release. Covers milestones M1 through M4 and M3.5.
 - cryptography 43.0.3
 - keyring 25.5.0
 
+[0.1.2]: https://github.com/tjndr/redactron/releases/tag/v0.1.2
 [0.1.1]: https://github.com/tjndr/redactron/releases/tag/v0.1.1
 [0.1.0]: https://github.com/tjndr/redactron/releases/tag/v0.1.0

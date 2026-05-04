@@ -39,7 +39,7 @@ pip install redactron
 redactron init
 redactron vault init
 
-# Get the profile template, fill in your details, import it
+# Get the profile template — use this for every new profile
 redactron profile template --output /tmp/me.yaml
 # edit /tmp/me.yaml with your name, addresses, account numbers, etc.
 redactron profile add --client me --from /tmp/me.yaml
@@ -47,11 +47,11 @@ redactron profile add --client me --from /tmp/me.yaml
 # Redact a single file
 redactron run document.pdf --client me
 
-# Redact an entire folder — outputs go to ./redacted/
+# Redact multiple files in a folder — outputs go to ./documents/redacted/
 redactron run ./documents/ --client me
 ```
 
-`document_redacted.pdf` lands in the same directory. For a folder, redacted files go to `documents/redacted/`, with a consolidated summary report in `documents/redacted-reports/`.
+`document_redacted.pdf` lands in the same directory as the input. For a folder, all redacted files go to `documents/redacted/` and a consolidated summary report is written to `documents/redacted-reports/`.
 
 ## Features
 
@@ -77,7 +77,7 @@ subject:
   phones: ["+1-555-867-5309"]
   emails: ["jane@example.com"]
   account_numbers:
-    - value: "ACC-9900112233"
+    - value: "0021305789Q834"
       preserve_last: 4
 detection:
   fuzzy_match: true
