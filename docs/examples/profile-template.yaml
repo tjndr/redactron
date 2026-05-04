@@ -23,11 +23,17 @@ subject:
                           # e.g. ["jane@example.com"]
   ssns: []                # XXX-XX-XXXX format
                           # e.g. ["123-45-6789"]
-  account_numbers: []     # list of {value: "...", preserve_last: N}
+  account_numbers: []     # list of account numbers to redact
                           # preserve_last: keep last N digits visible (default 4)
-                          # e.g. [{value: "ACC-9900112233", preserve_last: 4}]
+                          # Example (uncomment and fill in):
+                          # account_numbers:
+                          #   - value: "0021305789Q834"
+                          #     preserve_last: 4
   custom_patterns: []     # named regex patterns
-                          # e.g. [{name: "employee_id", regex: "EMP-\\d{6}"}]
+                          # Example:
+                          # custom_patterns:
+                          #   - name: "employee_id"
+                          #     regex: "EMP-\\d{6}"
 
 detection:
   use_presidio: false     # enable Microsoft Presidio NLP for auto-detection
