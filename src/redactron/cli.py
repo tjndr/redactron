@@ -19,6 +19,26 @@ from redactron.profile import Profile
 
 log = logging.getLogger(__name__)
 
+_BANNER = """\
+ ____  _____ ____    _    ____ _____ ____   ___  _   _
+|  _ \\| ____|  _ \\  / \\  / ___|_   _|  _ \\ / _ \\| \\ | |
+| |_) |  _| | | | |/ _ \\| |     | | | |_) | | | |  \\| |
+|  _ <| |___| |_| / ___ \\ |___  | | |  _ <| |_| | |\\  |
+|_| \\_\\_____|____/_/   \\_\\____| |_| |_| \\_\\\\___/|_| \\_|
+"""
+_TAGLINE = "Local-only PII redaction. No cloud. No subscription."
+
+
+def _print_banner(quiet: bool = False) -> None:
+    """Print the ASCII banner + tagline unless quiet or NO_COLOR."""
+    import os
+    if quiet or os.environ.get("NO_BANNER") or os.environ.get("NO_COLOR"):
+        return
+    from rich.console import Console
+    console = Console(highlight=False)
+    console.print(f"[bold cyan]{_BANNER}[/bold cyan]", end="")
+    console.print(f"[dim]{_TAGLINE}[/dim]\n")
+
 app = typer.Typer(
     name="redactron",
     help="Local-only CLI for batch PII redaction in PDFs.",
@@ -53,6 +73,7 @@ def main(
 @app.command("version")
 def version_cmd() -> None:
     """Show version and exit."""
+    _print_banner()
     typer.echo(f"redactron {__version__}")
 
 
@@ -112,9 +133,11 @@ def run(
     subject: str = typer.Option("", "--subject", "-s", help="Subject slug for audit tagging."),
     no_report: bool = typer.Option(False, "--no-report", help="Skip writing report files."),
     debug: bool = typer.Option(False, "--debug", help="Show full stack traces on error."),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress banner and progress."),
     client: str = typer.Option("", "--client", "-c", help="Load profile from vault by client ID."),
 ) -> None:
     """Redact PII from a PDF file or directory of PDFs."""
+    _print_banner(quiet or json_output)
     from redactron.profile import load_profile
 
     if client:
