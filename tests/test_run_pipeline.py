@@ -94,8 +94,8 @@ class TestNumericTokenNoCrash:
 # ---------------------------------------------------------------------------
 
 class TestNumericTokenWarningLog:
-    def test_numeric_span_logs_warning_not_crash(self, caplog: pytest.LogCaptureFixture) -> None:
-        """When a numeric span reaches the fuzzy-match gate, a WARNING is logged."""
+    def test_numeric_span_logs_debug_not_crash(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Numeric span at fuzzy-match gate logs DEBUG (not warning)."""
         layer = TextLayer(
             page_num=0,
             text="103 9.22",
@@ -103,17 +103,16 @@ class TestNumericTokenWarningLog:
             block_type=0,
         )
         profile = _profile_with_address()
-        with caplog.at_level(logging.WARNING, logger="redactron.detect.address_detector"):
+        with caplog.at_level(logging.DEBUG, logger="redactron.detect.address_detector"):
             detect_addresses([layer], profile)
-        # After fix: warning logged. Before fix: AssertionError raised (test fails).
-        # We check that no AssertionError was raised (test reaching here = pass after fix).
-        # The warning message check is a bonus assertion.
-        warning_msgs = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
-        # After fix this will contain the skip message; before fix the test crashes above
+        debug_msgs = [r.message for r in caplog.records if r.levelno == logging.DEBUG]
         assert any("numeric" in str(m).lower() or "skip" in str(m).lower()
-                   for m in warning_msgs), (
-            f"Expected a warning about numeric span, got: {warning_msgs}"
+                   for m in debug_msgs), (
+            f"Expected a debug message about numeric span, got: {debug_msgs}"
         )
+        # Confirm no WARNING is emitted for this expected behavior
+        warning_msgs = [r for r in caplog.records if r.levelno >= logging.WARNING]
+        assert not warning_msgs, f"Unexpected warnings: {warning_msgs}"
 
     def test_numeric_span_not_redacted(self) -> None:
         """'103 9.22' must NOT be redacted (no profile match)."""
