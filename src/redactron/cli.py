@@ -692,10 +692,11 @@ def _load_profile_for_client(client_id: str) -> Profile:
     store = _get_vault_store()
     profile_dict = store.get_profile(client_id)
     if profile_dict is None:
-        metas = store.list_profiles()
-        available = ", ".join(m.client_id for m in metas) or "(none)"
         typer.echo(
-            f"Error: client '{client_id}' not found in vault. Available: {available}",
+            f"Error: client '{client_id}' not found in vault.\n"
+            "Try:\n"
+            "  redactron profile list\n"
+            "  redactron --help",
             err=True,
         )
         raise typer.Exit(1)
