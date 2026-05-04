@@ -92,7 +92,8 @@ def run_pipeline(
     score_threshold: float = 0.5,
     verify: bool = True,
     write_reports: bool = True,
-    ocr_enabled: bool = False,
+    ocr_enabled: bool = True,
+    force_ocr: bool = False,
 ) -> PipelineResult:
     """Run the full redaction pipeline with safety-net multi-pass.
 
@@ -106,7 +107,8 @@ def run_pipeline(
         profile: Loaded and validated Profile.
         score_threshold: Minimum score for Presidio detections.
         verify: Whether to run post-redaction verification.
-        ocr_enabled: If True, OCR image-only pages and paint redactions.
+        ocr_enabled: If True (default), auto-OCR image-only pages via pytesseract.
+        force_ocr: If True, OCR every page regardless of text content.
 
     Returns:
         PipelineResult with detections, safety_passes, and verification status.
@@ -193,7 +195,7 @@ def run_pipeline(
 
     # OCR pass: paint redactions on image-only pages
     if ocr_enabled:
-        _apply_ocr_redactions(working_doc, profile)
+        _apply_ocr_redactions(working_doc, profile, force=force_ocr)
 
     # Save the final working doc
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -267,7 +269,7 @@ def _overlaps_any(
     return False
 
 
-def _apply_ocr_redactions(doc: fitz.Document, profile: Profile) -> None:
+def _apply_ocr_redactions(doc: fitz.Document, profile: Profile, force: bool = False) -> None:
     """OCR image-only pages and paint black over PII words.
 
     Builds a set of PII strings from the profile (display_name, aliases,
@@ -288,7 +290,7 @@ def _apply_ocr_redactions(doc: fitz.Document, profile: Profile) -> None:
     for an in subj.account_numbers:
         pii_texts.add(an.value)
 
-    ocr_results = ocr_document(doc)
+    ocr_results = ocr_document(doc, force=force)
     for page_result in ocr_results:
         page = doc[page_result.page_num]
         count = paint_ocr_redactions(page, page_result.words, pii_texts)
