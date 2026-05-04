@@ -29,6 +29,14 @@ def test_version() -> None:
     assert "redactron" in result.output
 
 
+def test_version_flag() -> None:
+    """--version and -V top-level flags print version and exit 0."""
+    for flag in ["--version", "-V"]:
+        result = runner.invoke(app, [flag])
+        assert result.exit_code == 0, f"{flag} exited {result.exit_code}"
+        assert "redactron" in result.output
+
+
 def test_help() -> None:
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0
