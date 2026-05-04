@@ -135,6 +135,9 @@ def run(
     json_output: bool = typer.Option(False, "--json", help="Output results as JSON."),
     subject: str = typer.Option("", "--subject", "-s", help="Subject slug for audit tagging."),
     no_report: bool = typer.Option(False, "--no-report", help="Skip writing report files."),
+    per_file_reports: bool = typer.Option(
+        False, "--per-file-reports", help="Write per-file reports (default: consolidated only)."
+    ),
     debug: bool = typer.Option(False, "--debug", help="Show full stack traces on error."),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress banner and progress."),
     client: str = typer.Option("", "--client", "-c", help="Load profile from vault by client ID."),
@@ -187,6 +190,7 @@ def run(
             json_output=json_output,
             subject_id=subject,
             write_reports=not no_report,
+            per_file_reports=per_file_reports,
             ocr_enabled=not no_ocr,
             force_ocr=force_ocr,
         )
@@ -207,6 +211,7 @@ def _run_pipeline(
     json_output: bool,
     subject_id: str = "",
     write_reports: bool = True,
+    per_file_reports: bool = False,
     ocr_enabled: bool = True,
     force_ocr: bool = False,
 ) -> None:
@@ -243,7 +248,7 @@ def _run_pipeline(
                     profile,
                     score_threshold=threshold,
                     verify=verify,
-                    write_reports=write_reports,
+                    write_reports=write_reports and per_file_reports,
                     ocr_enabled=ocr_enabled,
                     force_ocr=force_ocr,
                 )
@@ -303,6 +308,16 @@ def _run_pipeline(
     if batch and not json_output:
         typer.echo(f"\nSummary: {n_ok} processed, {n_err} errored.")
 
+    # Consolidated batch report
+    if batch and write_reports and not json_output:
+        from datetime import datetime
+
+        from redactron.report.markdown import write_batch_summary
+        run_ts = datetime.now().strftime("%Y-%m-%d-%H%M")
+        reports_dir = (output or pdfs[0].parent) / "redacted-reports"
+        md_path, _ = write_batch_summary(results, errors, reports_dir, run_ts)
+        typer.echo(f"Report: {md_path}")
+
     if n_err > 0:
         raise typer.Exit(1 if n_ok > 0 else 2)
 
@@ -317,13 +332,19 @@ def _collect_pdfs(path: Path) -> list[Path]:
 
 
 def _output_path(input_path: Path, output: Optional[Path], batch: bool) -> Path:
-    """Compute the output path for a redacted PDF."""
+    """Compute the output path for a redacted PDF.
+
+    Single-file: alongside input (or explicit --output).
+    Batch: {input_dir}/redacted/{stem}_redacted.pdf
+    """
     stem = input_path.stem + "_redacted"
     name = stem + ".pdf"
     if output is None:
+        if batch:
+            return input_path.parent / "redacted" / name
         return input_path.parent / name
     if batch:
-        return output / name
+        return output / "redacted" / name
     return output
 
 
