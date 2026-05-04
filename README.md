@@ -34,7 +34,9 @@ For professional use, the vault stores multiple client profiles encrypted with A
 pip install redactron
 redactron init
 redactron vault init
-redactron profile add --client me --from docs/examples/profile-template.yaml
+redactron profile template --output /tmp/me.yaml
+# edit /tmp/me.yaml with your details
+redactron profile add --client me --from /tmp/me.yaml
 redactron run document.pdf --client me
 ```
 
@@ -115,6 +117,7 @@ redactron verify <path>
 redactron init
 redactron vault init
 redactron profile add --client <id> [--name <name>] [--from <yaml>]
+redactron profile template [--output <path>] [--client <id>]
 redactron profile list
 redactron profile show <id> [--reveal]
 redactron profile edit <id>
