@@ -23,12 +23,9 @@ subject:
                           # e.g. ["jane@example.com"]
   ssns: []                # XXX-XX-XXXX format
                           # e.g. ["123-45-6789"]
-  account_numbers: []     # list of account numbers to redact
-                          # preserve_last: keep last N digits visible (default 4)
-                          # Example (uncomment and fill in):
-                          # account_numbers:
-                          #   - value: "0021305789Q834"
-                          #     preserve_last: 4
+  account_numbers:          # list of account numbers to redact; preserve_last keeps last N digits visible
+    # - value: "0021305789Q834"
+    #   preserve_last: 4
   custom_patterns: []     # named regex patterns
                           # Example:
                           # custom_patterns:
