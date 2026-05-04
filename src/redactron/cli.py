@@ -775,6 +775,7 @@ def profile_edit(
 ) -> None:
     """Open profile in $EDITOR, re-encrypt on save. Temp file is secure-wiped."""
     import os
+    import shlex
     import subprocess
     import tempfile
 
@@ -786,16 +787,26 @@ def profile_edit(
         typer.echo(f"Profile '{client}' not found.", err=True)
         raise typer.Exit(1)
 
-    editor = os.environ.get("EDITOR", "vi")
+    # BLD-FIX-13: merge existing data onto full schema defaults so all fields visible
+    from redactron.profile import Profile, Subject
+    defaults = Profile(subject=Subject(display_name="")).model_dump(mode="json")
+    merged: dict = {**defaults, **profile_dict}  # type: ignore[type-arg]
+    merged["subject"] = {**defaults["subject"], **profile_dict.get("subject", {})}
+    merged["detection"] = {**defaults["detection"], **profile_dict.get("detection", {})}
+
+    # BLD-FIX-12: shlex.split so EDITOR="code --wait" works correctly
+    editor_str = os.environ.get("EDITOR", "vi")
+    editor_cmd = shlex.split(editor_str)
+
     with tempfile.NamedTemporaryFile(
         suffix=".yaml", mode="w", delete=False, prefix=f"redactron_{client}_"
     ) as tmp:
         tmp_path = Path(tmp.name)
-        tmp.write(yaml.dump(profile_dict, default_flow_style=False))
+        tmp.write(yaml.dump(merged, default_flow_style=False))
 
     try:
         tmp_path.chmod(0o600)
-        subprocess.run([editor, str(tmp_path)], check=True)
+        subprocess.run([*editor_cmd, str(tmp_path)], check=True)
         updated = yaml.safe_load(tmp_path.read_text())
         store.update_profile(client, updated)
         typer.echo(f"✅ Profile '{client}' updated.")
