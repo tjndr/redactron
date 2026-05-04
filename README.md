@@ -18,7 +18,7 @@ Encrypted multi-client vault. Touch ID gated on macOS. Audit log. OCR fallback f
 
 ---
 
-<!-- Demo GIF placeholder -->
+**[Read the v1.0 launch post →](LAUNCH.md)**
 
 ---
 

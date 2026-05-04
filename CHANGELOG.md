@@ -4,8 +4,6 @@ All notable changes to redactron are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
-
 ## [0.1.3] — 2026-05-04
 
 ### Fixed
